@@ -158,6 +158,7 @@ public abstract class OServerCommandAuthenticatedDbAbstract extends OServerComma
   protected boolean authenticate(final OHttpRequest iRequest, final OHttpResponse iResponse,
       final List<String> iAuthenticationParts, final String iDatabaseName) throws IOException {
     ODatabaseDocumentTx db = null;
+    
     try {
       db = (ODatabaseDocumentTx) server.openDatabase(iDatabaseName, iAuthenticationParts.get(0), iAuthenticationParts.get(1));
       // if (db.getUser() == null)
@@ -174,6 +175,9 @@ public abstract class OServerCommandAuthenticatedDbAbstract extends OServerComma
       return true;
 
     } catch (OSecurityAccessException e) {
+    	
+    	OLogManager.instance().error(this, "OServerCommandAuthenticatedDbAbstract.authenticate() OSecurityAccessException for DB: %s, Exception: %s", iDatabaseName, e.getMessage());
+    	
       // WRONG USER/PASSWD
     } catch (OLockException e) {
       OLogManager.instance().error(this, "Cannot access to the database '" + iDatabaseName + "'", ODatabaseException.class, e);
@@ -192,10 +196,15 @@ public abstract class OServerCommandAuthenticatedDbAbstract extends OServerComma
       throws IOException {
     // UNAUTHORIZED
     iRequest.sessionId = SESSIONID_UNAUTHORIZED;
-    String header = null;
-    if (iRequest.authentication == null || iRequest.authentication.equalsIgnoreCase("basic")) {
-      header = "WWW-Authenticate: Basic realm=\"OrientDB db-" + iDatabaseName + "\"";
-    }
+
+OLogManager.instance().error(this, "OServerCommandAuthenticatedDbAbstract.sendAuthorizationRequest() DB: %s", iDatabaseName);
+    
+    // Defaults to "WWW-Authenticate: Basic".
+    String header = server.getAuthenticationHeader(iDatabaseName);
+
+//    if (iRequest.authentication == null || iRequest.authentication.equalsIgnoreCase("basic")) {
+//      header = "WWW-Authenticate: Basic realm=\"OrientDB db-" + iDatabaseName + "\"";
+//    }
     if (isJsonResponse(iResponse)) {
       sendJsonError(iResponse, OHttpUtils.STATUS_AUTH_CODE, OHttpUtils.STATUS_AUTH_DESCRIPTION, OHttpUtils.CONTENT_TEXT_PLAIN,
           "401 Unauthorized.", header);
@@ -250,7 +259,9 @@ public abstract class OServerCommandAuthenticatedDbAbstract extends OServerComma
       String currentUserId = iRequest.data.currentUserId;
       if (currentUserId != null && currentUserId.length() > 0 && localDatabase != null && localDatabase.getUser() != null) {
         if (!currentUserId.equals(localDatabase.getUser().getIdentity().toString())) {
+
           ODocument userDoc = localDatabase.load(new ORecordId(currentUserId));
+
           localDatabase.setUser(new OUser(userDoc));
         }
       }

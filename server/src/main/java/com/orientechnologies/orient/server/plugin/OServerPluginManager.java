@@ -64,14 +64,13 @@ public class OServerPluginManager implements OService {
   private volatile TimerTask                           autoReloadTimerTask;
   private String                                       directory;
 
+  private boolean hotReload = true;
+  private boolean dynamic = true;
+  private boolean loadAtStartup = true;
+
   public void config(OServer iServer) {
     server = iServer;
-  }
 
-  public void startup() {
-    boolean hotReload = true;
-    boolean dynamic = true;
-    boolean loadAtStartup = true;
     directory = OSystemVariableResolver.resolveSystemVariables("${ORIENTDB_HOME}", ".") + "/plugins/";
 
     if (server.getConfiguration() != null && server.getConfiguration().properties != null)
@@ -90,14 +89,23 @@ public class OServerPluginManager implements OService {
       return;
 
     if (loadAtStartup)
-      updatePlugins();
+      updatePlugins(false); // false indicates to not call startup() on each plugin.
+  }
+
+  public void startup() {
+
+    if (!dynamic)
+      return;
+
+    if (loadAtStartup)
+      callStartup();
 
     if (hotReload) {
       // SCHEDULE A TIMER TASK FOR AUTO-RELOAD
       final TimerTask timerTask = new TimerTask() {
         @Override
         public void run() {
-          updatePlugins();
+          updatePlugins(true); // true indicates to call startup() on each plugin.
         }
       };
 
@@ -169,7 +177,17 @@ public class OServerPluginManager implements OService {
     return "plugin-manager";
   }
 
-  protected String updatePlugin(final File pluginFile) {
+  private void callStartup()
+  {
+    for(OServerPluginInfo pi : getPlugins())
+    {
+  		if(pi.getInstance() != null) pi.getInstance().startup();
+    	
+		registerStaticDirectory(pi);
+    }	
+  }
+
+  protected String updatePlugin(final File pluginFile, final boolean callStartup) {
     final String pluginFileName = pluginFile.getName();
 
     if (!pluginFile.isDirectory() && !pluginFileName.endsWith(".jar") && !pluginFileName.endsWith(".zip"))
@@ -195,11 +213,11 @@ public class OServerPluginManager implements OService {
 
       } catch (Exception e) {
         // IGNORE EXCEPTIONS
-        OLogManager.instance().debug(this, "Error on shutdowning plugin '%s'...", e, pluginFileName);
+        OLogManager.instance().debug(this, "Error on shutting down plugin '%s'...", e, pluginFileName);
       }
     }
 
-    installDynamicPlugin(pluginFile);
+    installDynamicPlugin(pluginFile, callStartup);
 
     return pluginFileName;
   }
@@ -257,7 +275,7 @@ public class OServerPluginManager implements OService {
 
   @SuppressWarnings("unchecked")
   protected OServerPlugin startPluginClass(final URLClassLoader pluginClassLoader, final String iClassName,
-      final OServerParameterConfiguration[] params) throws Exception {
+      final OServerParameterConfiguration[] params, final boolean callStartup) throws Exception {
 
     final Class<? extends OServerPlugin> classToLoad = (Class<? extends OServerPlugin>) Class.forName(iClassName, true,
         pluginClassLoader);
@@ -267,14 +285,17 @@ public class OServerPluginManager implements OService {
     final Method configMethod = classToLoad.getDeclaredMethod("config", OServer.class, OServerParameterConfiguration[].class);
     configMethod.invoke(instance, server, params);
 
-    // STARTUP()
-    final Method startupMethod = classToLoad.getDeclaredMethod("startup");
-    startupMethod.invoke(instance);
+    if(callStartup)
+    {
+      // STARTUP()
+      final Method startupMethod = classToLoad.getDeclaredMethod("startup");
+      startupMethod.invoke(instance);
+    }
 
     return instance;
   }
 
-  private void updatePlugins() {
+  private void updatePlugins(final boolean callStartup) {
     // load plugins.directory from server configuration or default to $ORIENTDB_HOME/plugins
     final File pluginsDirectory = new File(directory);
     if (!pluginsDirectory.exists())
@@ -289,7 +310,7 @@ public class OServerPluginManager implements OService {
 
     if (plugins != null)
       for (File plugin : plugins) {
-        final String pluginName = updatePlugin(plugin);
+        final String pluginName = updatePlugin(plugin, callStartup);
         if (pluginName != null)
           currentDynamicPlugins.remove(pluginName);
       }
@@ -299,7 +320,7 @@ public class OServerPluginManager implements OService {
       uninstallPluginByFile(pluginName);
   }
 
-  private void installDynamicPlugin(final File pluginFile) {
+  private void installDynamicPlugin(final File pluginFile, final boolean callStartup) {
     String pluginName = pluginFile.getName();
 
     final OServerPluginInfo currentPluginData;
@@ -349,7 +370,7 @@ public class OServerPluginManager implements OService {
           }
           final OServerParameterConfiguration[] pluginParams = params.toArray(new OServerParameterConfiguration[params.size()]);
 
-          pluginInstance = startPluginClass(pluginClassLoader, pluginClass, pluginParams);
+          pluginInstance = startPluginClass(pluginClassLoader, pluginClass, pluginParams, callStartup);
         } else {
           pluginInstance = null;
           parameters = null;
@@ -363,7 +384,10 @@ public class OServerPluginManager implements OService {
         registerPlugin(currentPluginData);
         loadedPlugins.put(pluginFile.getName(), pluginName);
 
-        registerStaticDirectory(currentPluginData);
+        if(callStartup)
+        {
+	        registerStaticDirectory(currentPluginData);
+	     }
       } finally {
         pluginConfigFile.close();
       }

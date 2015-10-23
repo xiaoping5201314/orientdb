@@ -60,6 +60,8 @@ import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.record.ORecord;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.record.impl.ODocument;
+import com.orientechnologies.orient.core.security.OCredentialInterceptor;
+import com.orientechnologies.orient.core.security.OSecurityManager;
 import com.orientechnologies.orient.core.serialization.OSerializableStream;
 import com.orientechnologies.orient.core.serialization.serializer.record.string.ORecordSerializerSchemaAware2CSV;
 import com.orientechnologies.orient.core.serialization.serializer.record.string.ORecordSerializerStringAbstract;
@@ -75,7 +77,6 @@ import com.orientechnologies.orient.core.version.OVersionFactory;
 import com.orientechnologies.orient.enterprise.channel.binary.OChannelBinaryAsynchClient;
 import com.orientechnologies.orient.enterprise.channel.binary.OChannelBinaryProtocol;
 import com.orientechnologies.orient.enterprise.channel.binary.ORemoteServerEventListener;
-
 /**
  * This object is bound to each remote ODatabase instances.
  */
@@ -227,8 +228,22 @@ public class OStorageRemote extends OStorageAbstract implements OStorageProxy {
     try {
       if (status == STATUS.CLOSED || !iUserName.equals(connectionUserName) || !iUserPassword.equals(connectionUserPassword)
           || this.tokens.isEmpty()) {
-        connectionUserName = iUserName;
-        connectionUserPassword = iUserPassword;
+
+
+        OCredentialInterceptor ci = OSecurityManager.instance().newCredentialInterceptor();
+		
+        if(ci != null)
+		  {	
+          ci.intercept(getURL(), iUserName, iUserPassword);
+          connectionUserName = ci.getUsername();
+          connectionUserPassword = ci.getPassword();
+        }
+        else // Do Nothing
+        {
+          connectionUserName = iUserName;
+          connectionUserPassword = iUserPassword;
+        }
+
         connectionOptions = iOptions != null ? new HashMap<String, Object>(iOptions) : null; // CREATE A COPY TO AVOID USER
         // MANIPULATION
         // POST OPEN

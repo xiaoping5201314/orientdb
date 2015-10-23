@@ -160,7 +160,7 @@ public abstract class ONetworkProtocolHttpAbstract extends ONetworkProtocol {
       }
 
       final String commandString = getCommandString(command);
-
+      
       final OServerCommand cmd = (OServerCommand) cmdManager.getCommand(commandString);
       Map<String, String> requestParams = cmdManager.extractUrlTokens(commandString);
       if (requestParams != null) {
@@ -308,13 +308,15 @@ public abstract class ONetworkProtocolHttpAbstract extends ONetworkProtocol {
             // UNAUTHORIZED
             errorCode = OHttpUtils.STATUS_AUTH_CODE;
             errorReason = OHttpUtils.STATUS_AUTH_DESCRIPTION;
-            responseHeaders = "WWW-Authenticate: Basic realm=\"OrientDB db-" + ((OSecurityAccessException) cause).getDatabaseName()
-                + "\"";
+//            responseHeaders = "WWW-Authenticate: Basic realm=\"OrientDB db-" + ((OSecurityAccessException) cause).getDatabaseName() + "\"";
+
+            responseHeaders = server.getAuthenticationHeader(((OSecurityAccessException) cause).getDatabaseName());
+
             errorMessage = null;
           } else {
             // USER ACCESS DENIED
             errorCode = 530;
-            errorReason = "Current user has not the privileges to execute the request.";
+            errorReason = "The current user does not have the privileges to execute the request.";
             errorMessage = "530 User access denied";
           }
           break;
@@ -450,6 +452,7 @@ public abstract class ONetworkProtocolHttpAbstract extends ONetworkProtocol {
       if (currChar == '\r') {
         if (request.length() > 0 && !endOfHeaders) {
           final String line = request.toString();
+                    
           if (OStringSerializerHelper.startsWithIgnoreCase(line, OHttpUtils.HEADER_AUTHORIZATION)) {
             // STORE AUTHORIZATION INFORMATION INTO THE REQUEST
             final String auth = line.substring(OHttpUtils.HEADER_AUTHORIZATION.length());
@@ -458,7 +461,13 @@ public abstract class ONetworkProtocolHttpAbstract extends ONetworkProtocol {
               iRequest.authorization = new String(OBase64Utils.decode(iRequest.authorization));
             } else if (OStringSerializerHelper.startsWithIgnoreCase(auth, OHttpUtils.AUTHORIZATION_BEARER)) {
               iRequest.bearerTokenRaw = auth.substring(OHttpUtils.AUTHORIZATION_BEARER.length() + 1);
-            } else {
+            } 
+            else if (OStringSerializerHelper.startsWithIgnoreCase(auth, OHttpUtils.AUTHORIZATION_NEGOTIATE))
+            {
+                // Retrieves the SPNEGO authorization token.
+                iRequest.authorization = "Negotiate:" + auth.substring(OHttpUtils.AUTHORIZATION_NEGOTIATE.length() + 1);
+            }
+            else {
               throw new IllegalArgumentException("Only HTTP Basic and Bearer authorization are supported");
             }
           } else if (OStringSerializerHelper.startsWithIgnoreCase(line, OHttpUtils.HEADER_CONNECTION)) {

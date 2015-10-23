@@ -51,6 +51,7 @@ import com.orientechnologies.orient.core.metadata.sequence.OSequenceLibraryProxy
 import com.orientechnologies.orient.core.schedule.OSchedulerListener;
 import com.orientechnologies.orient.core.schedule.OSchedulerListenerImpl;
 import com.orientechnologies.orient.core.schedule.OSchedulerListenerProxy;
+import com.orientechnologies.orient.core.security.OSecurityManager;
 import com.orientechnologies.orient.core.storage.OStorageProxy;
 
 public class OMetadataDefault implements OMetadataInternal {
@@ -196,9 +197,9 @@ public class OMetadataDefault implements OMetadataInternal {
         }), database);
 
     security = new OSecurityProxy(database.getStorage().getResource(OSecurity.class.getSimpleName(),
-        new Callable<OSecurityShared>() {
-          public OSecurityShared call() {
-            final OSecurityShared instance = new OSecurityShared();
+        new Callable<OSecurity>() {
+          public OSecurity call() {
+            final OSecurity instance = OSecurityManager.instance().newSecurity();
             if (iLoad) {
               security = instance;
               instance.load();

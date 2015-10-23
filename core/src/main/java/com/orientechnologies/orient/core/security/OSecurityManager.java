@@ -24,7 +24,9 @@ import com.orientechnologies.common.exception.OException;
 import com.orientechnologies.common.log.OLogManager;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.exception.OConfigurationException;
+import com.orientechnologies.orient.core.exception.OSecurityAccessException;
 import com.orientechnologies.orient.core.exception.OSecurityException;
+import com.orientechnologies.orient.core.metadata.security.OSecurity;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -47,6 +49,8 @@ public class OSecurityManager {
   public static final int               HASH_SIZE               = 24;
 
   private static final OSecurityManager instance                = new OSecurityManager();
+
+  private OSecurityFactory securityFactory = new OSecuritySharedFactory();
 
   private MessageDigest                 md;
 
@@ -244,5 +248,41 @@ public class OSecurityManager {
       hex[i] = (byte) Integer.parseInt(data.substring(2 * i, 2 * i + 2), 16);
 
     return hex;
+  }
+
+  public OCredentialInterceptor newCredentialInterceptor()
+  {
+  		OCredentialInterceptor ci = null;
+  		
+		try
+		{
+			String ciClass = OGlobalConfiguration.CLIENT_CREDENTIAL_INTERCEPTOR.getValueAsString();
+		
+			if(ciClass != null)
+			{
+				Class<?> cls = Class.forName(ciClass); // Throws a ClassNotFoundException if not found.
+				
+				if(OCredentialInterceptor.class.isAssignableFrom(cls))
+				{
+					ci = (OCredentialInterceptor)cls.newInstance();
+				}
+			}
+		}
+		catch(Exception ex)
+		{
+			OLogManager.instance().debug(this, "newCredentialInterceptor() Exception creating CredentialInterceptor", ex);
+		}
+
+    	return ci;
+  }
+
+  public OSecurityFactory getSecurityFactory() { return securityFactory; }
+  public void setSecurityFactory(OSecurityFactory factory) { securityFactory = factory; }
+  
+  public OSecurity newSecurity()
+  {
+    if(securityFactory != null) return securityFactory.newSecurity();
+    
+    return null;
   }
 }

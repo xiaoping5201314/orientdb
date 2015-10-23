@@ -270,12 +270,16 @@ public abstract class OBinaryNetworkProtocolAbstract extends ONetworkProtocol {
     iDatabase.create();
     if (dbUser != null) {
 
-      OUser oUser = iDatabase.getMetadata().getSecurity().getUser(dbUser);
-      if (oUser == null) {
-        iDatabase.getMetadata().getSecurity().createUser(dbUser, dbPasswd, new String[] { ORole.ADMIN });
-      } else {
-        oUser.setPassword(dbPasswd);
-        oUser.save();
+      // If the OServerSecurity interface is set then createDefaultUsers() must return true.
+      if(server.getServerSecurity() == null || (server.getServerSecurity() != null && server.getServerSecurity().createDefaultUsers()))
+      {
+        OUser oUser = iDatabase.getMetadata().getSecurity().getUser(dbUser);
+        if (oUser == null) {
+          iDatabase.getMetadata().getSecurity().createUser(dbUser, dbPasswd, new String[] { ORole.ADMIN });
+        } else {
+          oUser.setPassword(dbPasswd);
+          oUser.save();
+        }
       }
     }
 

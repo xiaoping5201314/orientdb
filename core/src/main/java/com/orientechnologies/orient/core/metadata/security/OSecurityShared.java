@@ -616,7 +616,7 @@ public class OSecurityShared implements OSecurity, OCloseable {
     version.incrementAndGet();
   }
 
-  private ODatabaseDocumentInternal getDatabase() {
+  protected ODatabaseDocumentInternal getDatabase() {
     return ODatabaseRecordThreadLocal.INSTANCE.get();
   }
 }
