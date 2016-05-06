@@ -10,7 +10,9 @@ public class OCuckooArray {
   }
 
   public void clear() {
-    data = new int[data.length];
+    for (int i = 0; i < filledTo.length; i++) {
+      filledTo[i] = 0;
+    }
   }
 
   public boolean set(int hash, int fingerprint) {
@@ -30,9 +32,9 @@ public class OCuckooArray {
     int item = data[itemIndex];
 
     final int dataOffset = 4 * (index - itemIndex);
-    final int dataMask = 0xFF << dataOffset;
+    final int dataMask = 0xF << dataOffset;
 
-    data[itemIndex] = ((item & dataMask) & ~dataMask) | (fingerprint << dataOffset);
+    data[itemIndex] = (item & ~dataMask) | (fingerprint << dataOffset);
 
     return true;
   }
@@ -51,7 +53,7 @@ public class OCuckooArray {
     final int item = data[itemIndex];
 
     final int dataOffset = 4 * (index - itemIndex);
-    final int dataMask = 0xFF << dataOffset;
+    final int dataMask = 0xF << dataOffset;
 
     return (item & dataMask) >>> dataOffset;
   }
@@ -70,7 +72,7 @@ public class OCuckooArray {
     final int item = data[itemIndex];
 
     final int offset = (4 * (index - itemIndex));
-    final int dataMask = 0xFF << offset;
+    final int dataMask = 0xF << offset;
 
     if ((item & dataMask) != (fingerprint << offset))
       return false;
