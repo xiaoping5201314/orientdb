@@ -4,9 +4,15 @@ public class OCuckooArray {
   private long[] filledTo;
   private int[]  data;
 
+
   public OCuckooArray(int capacity) {
-    data = new int[(capacity + 7) >>> 3];
-    filledTo = new long[(capacity + 63) >>> 6];
+    if (capacity < 64)
+      capacity = 64;
+
+    capacity = closestPowerOfTwo(capacity);
+
+    data = new int[capacity >>> 3];
+    filledTo = new long[capacity >>> 6];
   }
 
   public void clear() {
@@ -15,8 +21,7 @@ public class OCuckooArray {
     }
   }
 
-  public boolean set(int hash, int fingerprint) {
-    final int index = index(hash);
+  public boolean set(int index, int fingerprint) {
     final int fillIndex = index >>> 6;
 
     long fillItem = filledTo[fillIndex];
@@ -39,8 +44,7 @@ public class OCuckooArray {
     return true;
   }
 
-  public int get(int hash) {
-    final int index = index(hash);
+  public int get(int index) {
     final int fillIndex = index >>> 6;
 
     final long fillItem = filledTo[fillIndex];
@@ -58,8 +62,7 @@ public class OCuckooArray {
     return (item & dataMask) >>> dataOffset;
   }
 
-  public boolean remove(int hash, int fingerprint) {
-    final int index = index(hash);
+  public boolean remove(int index, int fingerprint) {
     final int fillIndex = index >>> 6;
 
     long fillItem = filledTo[fillIndex];
@@ -83,7 +86,25 @@ public class OCuckooArray {
     return true;
   }
 
-  private int index(int hash) {
-    return hash % (data.length << 3);
+  public int index(int hash) {
+    return (hash & 0x7FFFFFFF) & ((data.length << 3) - 1);
   }
+
+  /**
+   * Finds closest power of two for given integer value. Idea is simple duplicate the most significant bit to the lowest bits for
+   * the smallest number of iterations possible and then increment result value by 1.
+   *
+   * @param value Integer the most significant power of 2 should be found.
+   * @return The most significant power of 2.
+   */
+  private int closestPowerOfTwo(int value) {
+    int n = value - 1;
+    n |= n >>> 1;
+    n |= n >>> 2;
+    n |= n >>> 4;
+    n |= n >>> 8;
+    n |= n >>> 16;
+    return (n < 0) ? 1 : (n >= (1 << 30)) ? 1 << 30 : n + 1;
+  }
+
 }

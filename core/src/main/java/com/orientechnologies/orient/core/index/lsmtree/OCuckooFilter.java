@@ -33,118 +33,124 @@ public class OCuckooFilter {
   }
 
   public boolean add(byte[] key) {
-    final int[] result = fingerprintFirstSecondHash(key);
+    final int[] result = fingerprintFirstSecondIndex(key);
 
     final int fingerprint = result[0];
-    final int firstHash = result[1];
-    final int secondHash = result[2];
+    final int firstIndex = result[1];
+    final int secondIndex = result[2];
 
-    boolean inserted = false;
-    for (int i = 0; i < 500 && !inserted; i++) {
-      inserted = firstArray.set(firstHash, fingerprint);
-      if (!inserted) {
-        inserted = secondArray.set(secondHash, fingerprint);
-      }
-    }
+    if (set(firstIndex, secondIndex, fingerprint)) {
+      size++;
 
-    if (inserted)
       return true;
-
-    if (set(firstHash, secondHash, fingerprint)) {
-      return add(key);
     } else {
       return false;
     }
   }
 
   public boolean contains(byte[] key) {
-    final int[] result = fingerprintFirstSecondHash(key);
+    final int[] result = fingerprintFirstSecondIndex(key);
 
     final int fingerprint = result[0];
-    final int firstHash = result[1];
-    final int secondHash = result[2];
+    final int firstIndex = result[1];
+    final int secondIndex = result[2];
 
-    int f = firstArray.get(firstHash);
+    int f = firstArray.get(firstIndex);
     if (f == fingerprint)
       return true;
 
-    f = secondArray.get(secondHash);
+    f = secondArray.get(secondIndex);
 
     return f == fingerprint;
   }
 
-  private int[] fingerprintFirstSecondHash(byte[] key) {
+  private int[] fingerprintFirstSecondIndex(byte[] key) {
     final long h = OMurmurHash3.murmurHash3_x64_64(key, SEED);
 
     final int[] result = new int[3];
 
     result[0] = (int) (h & 0x0F);
-    result[1] = (int) ((h >>> 4) & 0x7FFFFFFF);
-    result[2] = result[1] ^ jswHashing(result[2]);
+    result[1] = firstArray.index((int) ((h >>> 4) & 0x7FFFFFFF));
+    result[2] = result[1] ^ secondArray.index(jswHashing(result[0]));
+
     return result;
   }
 
-  private boolean set(int firstHash, int secondHash, int fingerprint) {
+  private boolean set(int firstIndex, int secondIndex, int fingerprint) {
     boolean inserted;
 
-    inserted = firstArray.set(firstHash, fingerprint);
+    inserted = firstArray.set(firstIndex, fingerprint);
     if (!inserted) {
-      inserted = secondArray.set(secondHash, fingerprint);
+      inserted = secondArray.set(secondIndex, fingerprint);
     }
 
     if (!inserted) {
-      final int existingFingerprint = firstArray.get(firstHash);
+      final int existingFingerprint = firstArray.get(firstIndex);
 
-      final int nextHash = jswHashing(existingFingerprint) ^ firstHash;
+      final int nextIndex = secondArray.index(jswHashing(existingFingerprint)) ^ firstIndex;
 
-      if (move(existingFingerprint, nextHash, false, 0)) {
-        return set(firstHash, secondHash, fingerprint);
+      final boolean result = move(existingFingerprint, nextIndex, false, 0);
+      if (result) {
+        firstArray.remove(firstIndex, existingFingerprint);
+        return set(firstIndex, secondIndex, fingerprint);
       } else {
         return false;
       }
     } else {
-      size++;
 
       return true;
     }
   }
 
-  private boolean move(int fingerPrint, int hash, boolean first, int counter) {
+  private boolean move(int fingerPrint, int index, boolean first, int counter) {
     if (counter > 500)
       return false;
 
+    final boolean result;
     if (first) {
-      if (firstArray.set(fingerPrint, hash))
+      if (firstArray.set(index, fingerPrint))
         return true;
 
-      final int nextFingerprint = firstArray.get(hash);
-      final int nextHash = jswHashing(nextFingerprint) ^ hash;
+      final int nextFingerprint = firstArray.get(index);
+      final int nextIndex = secondArray.index(jswHashing(nextFingerprint)) ^ index;
 
-      return move(nextFingerprint, nextHash, false, counter + 1);
+      result = move(nextFingerprint, nextIndex, false, counter + 1);
+      if (result) {
+        firstArray.remove(index, nextFingerprint);
+        firstArray.set(index, fingerPrint);
+      }
+
+      return result;
     } else {
-      if (secondArray.set(fingerPrint, hash))
+      if (secondArray.set(index, fingerPrint))
         return true;
 
-      final int nextFingerprint = secondArray.get(hash);
-      final int nextHash = jswHashing(nextFingerprint) ^ hash;
+      final int nextFingerprint = secondArray.get(index);
+      final int nextIndex = firstArray.index(jswHashing(nextFingerprint)) ^ index;
 
-      return move(nextFingerprint, nextHash, true, counter + 1);
+      result = move(nextFingerprint, nextIndex, true, counter + 1);
+      if (result) {
+        secondArray.remove(index, nextFingerprint);
+        secondArray.set(index, fingerPrint);
+      }
+
+      return result;
     }
   }
 
   public void remove(byte[] key) {
-    final int[] result = fingerprintFirstSecondHash(key);
+    final int[] result = fingerprintFirstSecondIndex(key);
 
     final int fingerprint = result[0];
-    final int firstHash = result[1];
-    final int secondHash = result[2];
+    final int firstIndex = result[1];
+    final int secondIndex = result[2];
 
-    if (firstArray.remove(firstHash, fingerprint)) {
+    if (firstArray.remove(firstIndex, fingerprint)) {
       size--;
       return;
     }
 
-    if (secondArray.remove(secondHash, fingerprint)) {
+    if (secondArray.remove(secondIndex, fingerprint)) {
       size--;
     }
   }
