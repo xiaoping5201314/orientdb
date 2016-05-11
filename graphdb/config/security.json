@@ -22,6 +22,11 @@
         "name": "ServerConfig",
         "class": "com.orientechnologies.orient.server.security.authenticator.OServerConfigAuthenticator",
         "enabled": true
+      },
+      {
+        "name": "SystemAuthenticator",
+        "class": "com.orientechnologies.orient.server.security.authenticator.OSystemUserAuthenticator",
+        "enabled": true
       }
     ]
   },

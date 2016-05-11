@@ -19,6 +19,11 @@
  */
 package com.orientechnologies.orient.core.sql;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
 import com.orientechnologies.orient.core.command.OCommandDistributedReplicateRequest;
 import com.orientechnologies.orient.core.command.OCommandRequest;
 import com.orientechnologies.orient.core.command.OCommandRequestText;
@@ -29,11 +34,6 @@ import com.orientechnologies.orient.core.metadata.schema.OClass;
 import com.orientechnologies.orient.core.metadata.schema.OClassImpl;
 import com.orientechnologies.orient.core.metadata.schema.OPropertyImpl;
 import com.orientechnologies.orient.core.metadata.schema.OType;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 /**
  * SQL CREATE PROPERTY command: Creates a new property in the target class.
@@ -153,7 +153,6 @@ public class OCommandExecutorSQLCreateProperty extends OCommandExecutorSQLAbstra
       result.add(nextToken);
     }
     return result.toArray(new String[] {});
-    // return word.toString().split("\\.");
   }
 
   @Override
@@ -175,8 +174,8 @@ public class OCommandExecutorSQLCreateProperty extends OCommandExecutorSQLAbstra
 
     OPropertyImpl prop = (OPropertyImpl) sourceClass.getProperty(fieldName);
     if (prop != null)
-      throw new OCommandExecutionException("Property '" + className + "." + fieldName
-          + "' already exists. Remove it before to retry.");
+      throw new OCommandExecutionException(
+          "Property '" + className + "." + fieldName + "' already exists. Remove it before to retry.");
 
     // CREATE THE PROPERTY
     OClass linkedClass = null;
@@ -198,6 +197,11 @@ public class OCommandExecutorSQLCreateProperty extends OCommandExecutorSQLAbstra
   @Override
   public QUORUM_TYPE getQuorumType() {
     return QUORUM_TYPE.ALL;
+  }
+
+  @Override
+  public String getUndoCommand() {
+    return "drop property " + className + "." + fieldName;
   }
 
   @Override

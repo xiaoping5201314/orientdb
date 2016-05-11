@@ -20,6 +20,7 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.common.util.OCallable;
+import com.orientechnologies.orient.core.command.OCommandDistributedReplicateRequest;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
 
@@ -32,11 +33,17 @@ import java.util.Collection;
  *
  */
 public interface ODistributedDatabase {
+
+  String getDatabaseName();
+
   ODistributedResponse send2Nodes(ODistributedRequest iRequest, Collection<String> iClusterNames, Collection<String> iNodes,
       ODistributedRequest.EXECUTION_MODE iExecutionMode, Object localResult,
       OCallable<Void, ODistributedRequestId> iAfterSentCallback);
 
   void setOnline();
+
+  int checkQuorumBeforeReplicate(OCommandDistributedReplicateRequest.QUORUM_TYPE quorumType, Collection<String> iClusterNames,
+      Collection<String> iNodes, ODistributedConfiguration cfg);
 
   /**
    * Locks the record to be sure distributed transactions never work concurrently against the same records in the meanwhile the
@@ -49,7 +56,7 @@ public interface ODistributedDatabase {
    *          Request id
    * @return true if the lock succeed, otherwise false
    */
-  boolean lockRecord(OIdentifiable iRecord, final ODistributedRequestId iRequestId);
+  ODistributedRequestId lockRecord(OIdentifiable iRecord, final ODistributedRequestId iRequestId);
 
   /**
    * Unlocks the record previously locked through #lockRecord method.
