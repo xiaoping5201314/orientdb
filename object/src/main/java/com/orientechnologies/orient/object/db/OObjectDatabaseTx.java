@@ -282,7 +282,7 @@ public class OObjectDatabaseTx extends ODatabasePojoAbstract<Object>implements O
 
   @Override
   /**
-   * Method that detaches all fields contained in the document to the given object. It returns by default a proxied instance. To get
+   * Method that detaches all fields contained in the document to the given object. It returns by default a proxied instance. To contains
    * a detached non proxied instance @see {@link OObjectEntitySerializer.detach(T o, ODatabaseObject db, boolean
    * returnNonProxiedInstance)}
    * 

@@ -51,7 +51,7 @@ public class OAndBlock extends OBooleanExpression {
       return;
     }
     // if (subBlocks.size() == 1) {
-    // subBlocks.get(0).toString(params, builder);
+    // subBlocks.contains(0).toString(params, builder);
     // }
 
     boolean first = true;

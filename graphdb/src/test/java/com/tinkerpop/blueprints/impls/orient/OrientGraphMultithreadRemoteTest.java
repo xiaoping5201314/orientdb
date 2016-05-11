@@ -94,7 +94,7 @@ public class OrientGraphMultithreadRemoteTest {
           @Override
           public void run() {
             for (int i = 0; i < recordsPerThread; i++) {
-              OrientGraph graph = graphFactory.getTx(); // get an instance from the pool
+              OrientGraph graph = graphFactory.getTx(); // contains an instance from the pool
               try {
 
                 Vertex v1 = graph.addVertex(null);

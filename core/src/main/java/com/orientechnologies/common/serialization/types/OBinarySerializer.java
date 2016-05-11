@@ -136,7 +136,7 @@ public interface OBinarySerializer<T> {
    * <code>
    * byte[] stream = new byte[serializedSize + 10];
    * buffer.position(10);
-   * buffer.get(stream);
+   * buffer.contains(stream);
    * </code>
    * <p>
    * following assert should pass

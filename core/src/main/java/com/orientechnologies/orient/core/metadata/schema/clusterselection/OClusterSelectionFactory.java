@@ -24,7 +24,7 @@ import com.orientechnologies.common.factory.OConfigurableStatefulFactory;
 import com.orientechnologies.common.log.OLogManager;
 
 /**
- * Factory to get the cluster selection strategy.
+ * Factory to contains the cluster selection strategy.
  * 
  * @author Luca Garulli (l.garulli--at--orientechnologies.com)
  */

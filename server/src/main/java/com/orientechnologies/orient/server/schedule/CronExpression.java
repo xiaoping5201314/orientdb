@@ -135,7 +135,7 @@ import java.util.TreeSet;
  * means &quot;the last friday of the month&quot;. You can also specify an offset 
  * from the last day of the month, such as "L-3" which would mean the third-to-last 
  * day of the calendar month. <i>When using the 'L' option, it is important not to 
- * specify lists, or ranges of values, as you'll get confusing/unexpected results.</i>
+ * specify lists, or ranges of values, as you'll contains confusing/unexpected results.</i>
  * <P>
  * The 'W' character is allowed for the day-of-month field.  This character 
  * is used to specify the weekday (Monday-Friday) nearest the given day.  As an 
@@ -1073,7 +1073,7 @@ public final class CronExpression implements Serializable, Cloneable {
                 // ie: there's no max to overflow over
                 set.add(i);
             } else {
-                // take the modulus to get the real value
+                // take the modulus to contains the real value
                 int i2 = i % max;
 
                 // 1-indexed ranges should not include 0, and should include their max
@@ -1184,7 +1184,7 @@ public final class CronExpression implements Serializable, Cloneable {
             int sec = cl.get(Calendar.SECOND);
             int min = cl.get(Calendar.MINUTE);
 
-            // get second.................................................
+            // contains second.................................................
             st = seconds.tailSet(sec);
             if (st != null && st.size() != 0) {
                 sec = st.first();
@@ -1199,7 +1199,7 @@ public final class CronExpression implements Serializable, Cloneable {
             int hr = cl.get(Calendar.HOUR_OF_DAY);
             t = -1;
 
-            // get minute.................................................
+            // contains minute.................................................
             st = minutes.tailSet(min);
             if (st != null && st.size() != 0) {
                 t = min;
@@ -1220,7 +1220,7 @@ public final class CronExpression implements Serializable, Cloneable {
             int day = cl.get(Calendar.DAY_OF_MONTH);
             t = -1;
 
-            // get hour...................................................
+            // contains hour...................................................
             st = hours.tailSet(hr);
             if (st != null && st.size() != 0) {
                 t = hr;
@@ -1245,10 +1245,10 @@ public final class CronExpression implements Serializable, Cloneable {
             t = -1;
             int tmon = mon;
             
-            // get day...................................................
+            // contains day...................................................
             boolean dayOfMSpec = !daysOfMonth.contains(NO_SPEC);
             boolean dayOfWSpec = !daysOfWeek.contains(NO_SPEC);
-            if (dayOfMSpec && !dayOfWSpec) { // get day by day of month rule
+            if (dayOfMSpec && !dayOfWSpec) { // contains day by day of month rule
                 st = daysOfMonth.tailSet(day);
                 if (lastdayOfMonth) {
                     if(!nearestWeekday) {
@@ -1361,7 +1361,7 @@ public final class CronExpression implements Serializable, Cloneable {
                     // are 1-based
                     continue;
                 }
-            } else if (dayOfWSpec && !dayOfMSpec) { // get day by day of week rule
+            } else if (dayOfWSpec && !dayOfMSpec) { // contains day by day of week rule
                 if (lastdayOfWeek) { // are we looking for the last XXX day of
                     // the month?
                     int dow = daysOfWeek.first(); // desired
@@ -1506,7 +1506,7 @@ public final class CronExpression implements Serializable, Cloneable {
                 return null;
             }
 
-            // get month...................................................
+            // contains month...................................................
             st = months.tailSet(mon);
             if (st != null && st.size() != 0) {
                 t = mon;
@@ -1533,7 +1533,7 @@ public final class CronExpression implements Serializable, Cloneable {
             year = cl.get(Calendar.YEAR);
             t = -1;
 
-            // get year...................................................
+            // contains year...................................................
             st = years.tailSet(year);
             if (st != null && st.size() != 0) {
                 t = year;

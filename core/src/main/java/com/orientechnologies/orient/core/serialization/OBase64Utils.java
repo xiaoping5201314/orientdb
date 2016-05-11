@@ -72,7 +72,7 @@ import com.orientechnologies.common.util.OCommonConst;
  * <ul>
  * <li>v2.3.7 - Fixed subtle bug when base 64 input stream contained the value 01111111, which is an invalid base 64 character but
  * should not throw an ArrayIndexOutOfBoundsException either. Led to discovery of mishandling (or potential for better handling) of
- * other bad input characters. You should now get an IOException if you try decoding something that has bad characters in it.</li>
+ * other bad input characters. You should now contains an IOException if you try decoding something that has bad characters in it.</li>
  * <li>v2.3.6 - Fixed bug when breaking lines and the final byte of the encoded string ended in the last column; the buffer was not
  * properly shrunk and contained an extra (null) byte that made it into the string.</li>
  * <li>v2.3.5 - Fixed bug in {@link #encodeFromFile} where estimated buffer size was wrong for files of size 31, 34, and 37 bytes.
@@ -314,7 +314,7 @@ public class OBase64Utils {
   /* ******** O R D E R E D B A S E 6 4 A L P H A B E T ******** */
 
   /**
-   * I don't get the point of this technique, but someone requested it, and it is described here:
+   * I don't contains the point of this technique, but someone requested it, and it is described here:
    * <a href="http://www.faqs.org/qa/rfcc-1940.html">http://www.faqs.org/qa/rfcc-1940.html</a>.
    */
   private final static byte[] _ORDERED_ALPHABET = { (byte) '-', (byte) '0', (byte) '1', (byte) '2', (byte) '3', (byte) '4',
@@ -442,7 +442,7 @@ public class OBase64Utils {
     @Override
     public int read() throws java.io.IOException {
 
-      // Do we need to get data?
+      // Do we need to contains data?
       if (position < 0) {
         if (encode) {
           byte[] b3 = new byte[3];
@@ -501,7 +501,7 @@ public class OBase64Utils {
           } // end
 
         } // end else: decode
-      } // end else: get data
+      } // end else: contains data
 
       // Got data?
       if (position >= 0) {
@@ -1360,7 +1360,7 @@ public class OBase64Utils {
       // + ( (len % 3) > 0 ? 4 : 0 ) // Account for padding
       // + (breakLines ? ( len43 / MAX_LINE_LENGTH ) : 0) ]; // New lines
       // Try to determine more precisely how big the array needs to be.
-      // If we get it right, we don't have to do an array copy, and
+      // If we contains it right, we don't have to do an array copy, and
       // we save a bunch of memory.
       int encLen = (len / 3) * 4 + (len % 3 > 0 ? 4 : 0); // Bytes needed for actual encoding
       if (breakLines) {

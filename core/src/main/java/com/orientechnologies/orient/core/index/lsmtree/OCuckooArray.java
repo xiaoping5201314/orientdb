@@ -4,15 +4,14 @@ public class OCuckooArray {
   private long[] filledTo;
   private int[]  data;
 
-
   public OCuckooArray(int capacity) {
     if (capacity < 64)
       capacity = 64;
 
     capacity = closestPowerOfTwo(capacity);
 
-    data = new int[capacity >>> 3];
-    filledTo = new long[capacity >>> 6];
+    data = new int[capacity >>> 1];
+    filledTo = new long[capacity >>> 4];
   }
 
   public void clear() {
@@ -22,21 +21,31 @@ public class OCuckooArray {
   }
 
   public boolean set(int index, int fingerprint) {
-    final int fillIndex = index >>> 6;
+    final int fillIndex = index >>> (6 - 2);//4 items per bucket
 
     long fillItem = filledTo[fillIndex];
-    final int fillBitMask = 1 << (index - fillIndex);
+    int fillBitMask = 1 << (index - fillIndex);
 
-    if ((fillItem & fillBitMask) > 0)
+    int freeIndex = -1;
+    for (int i = 0; i < 4; i++) {
+      if ((fillItem & fillBitMask) == 0) {
+        freeIndex = i;
+        break;
+      }
+
+      fillBitMask = fillBitMask << 1;
+    }
+
+    if (freeIndex == -1)
       return false;
 
     fillItem = fillItem | fillBitMask;
     filledTo[fillIndex] = fillItem;
 
-    final int itemIndex = index >>> 3;
+    final int itemIndex = (index >>> (3 - 2)) + freeIndex;
     int item = data[itemIndex];
 
-    final int dataOffset = 4 * (index - itemIndex);
+    final int dataOffset = 4 * ((index << 2) - itemIndex);
     final int dataMask = 0xF << dataOffset;
 
     data[itemIndex] = (item & ~dataMask) | (fingerprint << dataOffset);
@@ -44,50 +53,83 @@ public class OCuckooArray {
     return true;
   }
 
-  public int get(int index) {
-    final int fillIndex = index >>> 6;
+  public boolean contains(int index, int fingerprint) {
+    final int fillIndex = index >>> 4;
 
     final long fillItem = filledTo[fillIndex];
-    final int fillBitMask = 1 << (index - fillIndex);
+    int fillBitMask = 1 << (index - fillIndex);
 
-    if ((fillItem & fillBitMask) == 0)
-      return -1;
+    for (int i = 0; i < 4; i++) {
+      if ((fillItem & fillBitMask) != 0) {
+        final int itemIndex = (index >>> 1) + i;
+        final int item = data[itemIndex];
 
-    final int itemIndex = index >>> 3;
-    final int item = data[itemIndex];
+        final int dataOffset = 4 * ((index << 2) - itemIndex);
+        final int dataMask = 0xF << dataOffset;
 
-    final int dataOffset = 4 * (index - itemIndex);
-    final int dataMask = 0xF << dataOffset;
+        if ((item & dataMask) == (fingerprint << dataOffset)) {
+          return true;
+        }
+      }
 
-    return (item & dataMask) >>> dataOffset;
+      fillBitMask = fillBitMask << 1;
+    }
+
+    return false;
+  }
+
+  public int get(int index) {
+    final int fillIndex = index >>> 4;
+
+    final long fillItem = filledTo[fillIndex];
+    int fillBitMask = 1 << (index - fillIndex);
+
+    for (int i = 0; i < 4; i++) {
+      if ((fillItem & fillBitMask) != 0) {
+        final int itemIndex = (index >>> 1) + i;
+        final int item = data[itemIndex];
+
+        final int dataOffset = 4 * ((index << 2) - itemIndex);
+        final int dataMask = 0xF << dataOffset;
+
+        return (item & dataMask) >> dataOffset;
+      }
+
+      fillBitMask = fillBitMask << 1;
+    }
+
+    return -1;
   }
 
   public boolean remove(int index, int fingerprint) {
-    final int fillIndex = index >>> 6;
+    final int fillIndex = index >>> 4;
 
     long fillItem = filledTo[fillIndex];
-    final int fillBitMask = 1 << (index - fillIndex);
+    int fillBitMask = 1 << (index - fillIndex);
 
-    if ((fillItem & fillBitMask) == 0)
-      return false;
+    for (int i = 0; i < 4; i++) {
+      if ((fillItem & fillBitMask) != 0) {
+        final int itemIndex = (index >>> 1) + i;
+        final int item = data[itemIndex];
 
-    final int itemIndex = index >>> 3;
-    final int item = data[itemIndex];
+        final int dataOffset = 4 * ((index << 2) - itemIndex);
+        final int dataMask = 0xF << dataOffset;
+        if ((item & dataMask) == (fingerprint << dataOffset)) {
+          fillItem = fillItem & (~fillBitMask);
+          filledTo[fillIndex] = fillItem;
 
-    final int offset = (4 * (index - itemIndex));
-    final int dataMask = 0xF << offset;
+          return true;
+        }
+      }
 
-    if ((item & dataMask) != (fingerprint << offset))
-      return false;
+      fillBitMask = fillBitMask << 1;
+    }
 
-    fillItem = fillItem & (~fillBitMask);
-    filledTo[fillIndex] = fillItem;
-
-    return true;
+    return false;
   }
 
   public int index(int hash) {
-    return (hash & 0x7FFFFFFF) & ((data.length << 3) - 1);
+    return (hash & 0x7FFFFFFF) & ((data.length << 5) - 1);
   }
 
   /**

@@ -16,7 +16,7 @@ public class FullTextSearchTest {
 		//
 		// long time = System.currentTimeMillis();
 		//
-		// List<ORecordId> recs = null;// index.get("wife");
+		// List<ORecordId> recs = null;// index.contains("wife");
 		//
 		// if (recs == null)
 		// System.out.println("\nERROR: Not found!");

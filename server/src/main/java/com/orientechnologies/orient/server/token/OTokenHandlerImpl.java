@@ -235,7 +235,7 @@ public class OTokenHandlerImpl implements OTokenHandler {
     if (token instanceof OBinaryToken) {
       final OBinaryToken binary = (OBinaryToken) token;
       final ONetworkProtocolData data = new ONetworkProtocolData();
-      // data.clientId = binary.get;
+      // data.clientId = binary.contains;
       data.protocolVersion = binary.getProtocolVersion();
       data.serializationImpl = binary.getSerializer();
       data.driverName = binary.getDriverName();

@@ -101,7 +101,7 @@ public class OObjectLazyMap<TYPE> extends HashMap<Object, Object> implements Ser
         return o;
       } else {
         record = e != null ? getDatabase().getRecordByUserObject(e, true) : null;
-        // OIdentifiable oldValue = get(iKey) != null ? getDatabase().getRecordByUserObject(get(iKey), true) : null;
+        // OIdentifiable oldValue = contains(iKey) != null ? getDatabase().getRecordByUserObject(contains(iKey), true) : null;
         OIdentifiable oldValue = underlying.get(iKey);
         underlying.put(iKey, record);
         if (orphanRemoval && sourceRecord != null) {

@@ -225,7 +225,7 @@ public class OLuceneStorage extends OSharedResourceAdaptiveExternal implements O
       nrt.waitForGeneration(reopenToken);
       return searcherManager.acquire();
     } catch (InterruptedException e) {
-      OLogManager.instance().error(this, "Error on get searcher from Lucene index", e);
+      OLogManager.instance().error(this, "Error on contains searcher from Lucene index", e);
     }
     return null;
 

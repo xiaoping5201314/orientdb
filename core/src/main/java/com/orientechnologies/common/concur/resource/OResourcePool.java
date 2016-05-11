@@ -64,7 +64,7 @@ public class OResourcePool<K, V> {
   }
 
   public V getResource(K key, final long maxWaitMillis, Object... additionalArgs) throws OLockException {
-    // First, get permission to take or create a resource
+    // First, contains permission to take or create a resource
     try {
       if (!sem.tryAcquire(maxWaitMillis, TimeUnit.MILLISECONDS))
         throw new OLockException("No more resources available in pool (max=" + maxResources + "). Requested resource: " + key);

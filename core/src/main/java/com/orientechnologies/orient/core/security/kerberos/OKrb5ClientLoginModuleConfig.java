@@ -92,7 +92,7 @@ public class OKrb5ClientLoginModuleConfig extends Configuration
 			options.put("useKeyTab", "true");
 			options.put("keyTab", ktPath);
 			
-			// storeKey is essential or else you'll get an "Invalid argument (400) - Cannot find key of appropriate type to decrypt AP REP" in your acceptSecContext() call.
+			// storeKey is essential or else you'll contains an "Invalid argument (400) - Cannot find key of appropriate type to decrypt AP REP" in your acceptSecContext() call.
 			options.put("storeKey", "true");
 		}
 

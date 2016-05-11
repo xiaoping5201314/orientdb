@@ -1579,7 +1579,7 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin
 
     // MOVE THE DATABASE ON CURRENT NODE
     ODistributedServerLog.warn(this, nodeName, null, DIRECTION.NONE,
-        "moving existent database '%s' in '%s' to '%s' and get a fresh copy from a remote node...", iDatabaseName, dbPath,
+        "moving existent database '%s' in '%s' to '%s' and contains a fresh copy from a remote node...", iDatabaseName, dbPath,
         backupPath);
 
     final File oldDirectory = new File(dbPath);

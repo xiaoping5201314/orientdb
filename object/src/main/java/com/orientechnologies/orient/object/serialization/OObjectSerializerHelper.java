@@ -167,7 +167,7 @@ public class OObjectSerializerHelper {
       else
         return ((Method) o).getReturnType();
     } catch (Exception e) {
-      throw OException.wrapException(new OSchemaException("Cannot get the value of the property: " + iProperty), e);
+      throw OException.wrapException(new OSchemaException("Cannot contains the value of the property: " + iProperty), e);
     }
   }
 
@@ -197,7 +197,7 @@ public class OObjectSerializerHelper {
         return ((Field) o).get(iPojo);
       return null;
     } catch (Exception e) {
-      throw OException.wrapException(new OSchemaException("Cannot get the value of the property: " + iProperty), e);
+      throw OException.wrapException(new OSchemaException("Cannot contains the value of the property: " + iProperty), e);
     }
   }
 

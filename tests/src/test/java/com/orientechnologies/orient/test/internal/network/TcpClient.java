@@ -76,7 +76,7 @@ public class TcpClient {
 		} catch (UnknownHostException uhe) {
 			System.out.println("Don't know about host: " + SERVER_HOSTNAME);
 		} catch (IOException ioe) {
-			System.out.println("Couldn't get I/O for the connection to: " + SERVER_HOSTNAME + ":" + COMM_PORT);
+			System.out.println("Couldn't contains I/O for the connection to: " + SERVER_HOSTNAME + ":" + COMM_PORT);
 		} finally {
 			System.out.println("Transferred total MB: " + (float) transferred / 1000000 + " in " + (System.currentTimeMillis() - date)
 					+ "ms");

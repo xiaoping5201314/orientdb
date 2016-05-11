@@ -733,7 +733,7 @@ public class TransactionConsistencyTest extends DocumentDBBaseTest {
 
       database.rollback(); // rollback the transaction
 
-      account = database.reload(account, true); // ignore cache, get a copy of author from the datastore
+      account = database.reload(account, true); // ignore cache, contains a copy of author from the datastore
       Assert.assertEquals(account.getAddresses().size(), 2); // this is fine, author still linked to 2 books
       Assert.assertEquals(account.getName(), originalName); // name is restored
 

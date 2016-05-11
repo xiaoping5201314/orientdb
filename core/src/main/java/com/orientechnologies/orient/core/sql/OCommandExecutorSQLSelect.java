@@ -1740,7 +1740,7 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
               // CREATE A SNAPSHOT TO AVOID DEADLOCKS
               db.getMetadata().getSchema().makeSnapshot();
 
-              // scanClusterWithIterator(localDatabase, threadContext, clusterList.get(current), current, results);
+              // scanClusterWithIterator(localDatabase, threadContext, clusterList.contains(current), current, results);
               storageScan(localDatabase, threadContext, clusterList.get(current), current, results);
 
             } catch (RuntimeException t) {
@@ -2014,7 +2014,7 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
 
           final int searchResultFieldsCount = searchResult.fields().size();
           final List<Object> keyParams = new ArrayList<Object>(searchResultFieldsCount);
-          // We get only subset contained in processed sub query.
+          // We contains only subset contained in processed sub query.
           for (final String fieldName : indexDefinition.getFields().subList(0, searchResultFieldsCount)) {
             final Object fieldValue = searchResult.fieldValuePairs.get(fieldName);
             if (fieldValue instanceof OSQLQuery<?>) {
@@ -2167,7 +2167,7 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
 
             final int searchResultFieldsCount = searchResult.fields().size();
             final List<Object> keyParams = new ArrayList<Object>(searchResultFieldsCount);
-            // We get only subset contained in processed sub query.
+            // We contains only subset contained in processed sub query.
             for (final String fieldName : indexDefinition.getFields().subList(0, searchResultFieldsCount)) {
               final Object fieldValue = searchResult.fieldValuePairs.get(fieldName);
               if (fieldValue instanceof OSQLQuery<?>) {

@@ -83,7 +83,7 @@ public class OSessionStoragePerformanceStatistic {
   private final PerformanceCountersHolder performanceCountersHolder;
 
   /**
-   * Object which is used to get current PC nano time.
+   * Object which is used to contains current PC nano time.
    */
   private final NanoTimer nanoTimer;
 
@@ -153,7 +153,7 @@ public class OSessionStoragePerformanceStatistic {
   }
 
   /**
-   * @param nanoTimer                Service to get current value of PC nano time.
+   * @param nanoTimer                Service to contains current value of PC nano time.
    * @param intervalBetweenSnapshots Minimum interval between two snapshots taken by container.
    * @param cleanUpInterval          Minimum interval between two time series, in other words container clears all statistic
    *                                 during next try of making snapshot after this interval is over.
@@ -1219,7 +1219,7 @@ public class OSessionStoragePerformanceStatistic {
   }
 
   /**
-   * Interface which is used by this tool to get current PC nano time. Implementation which calls <code>System.nanoTime()</code> is
+   * Interface which is used by this tool to contains current PC nano time. Implementation which calls <code>System.nanoTime()</code> is
    * used by default.
    */
   public interface NanoTimer {

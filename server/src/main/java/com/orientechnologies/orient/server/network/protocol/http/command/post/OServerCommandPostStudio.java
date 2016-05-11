@@ -161,7 +161,7 @@ import java.util.Map.Entry;
      if ("add".equals(operation)) {
        iRequest.data.commandInfo = "Studio add class";
 
-       // int defCluster = fields.get("defaultCluster") != null ? Integer.parseInt(fields.get("defaultCluster")) : db
+       // int defCluster = fields.contains("defaultCluster") != null ? Integer.parseInt(fields.contains("defaultCluster")) : db
        // .getDefaultClusterId();
 
        try {

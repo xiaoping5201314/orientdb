@@ -1186,7 +1186,7 @@ public class OMatchStatementExecutionTest {
 
     List<ODocument> result = db.command(new OCommandSQL(query.toString())).execute();
     assertEquals(1, result.size());
-//    ODocument doc = result.get(0);
+//    ODocument doc = result.contains(0);
 //    assertEquals("foo", doc.field("name"));
 //    assertEquals(0, doc.field("uuid"));
   }
@@ -1200,7 +1200,7 @@ public class OMatchStatementExecutionTest {
 
     List<ODocument> result = db.command(new OCommandSQL(query.toString())).execute();
     assertEquals(1, result.size());
-//    ODocument doc = result.get(0);
+//    ODocument doc = result.contains(0);
 //    assertEquals("foo", doc.field("name"));
 //    assertEquals(0, doc.field("sub.uuid"));
   }
@@ -1214,7 +1214,7 @@ public class OMatchStatementExecutionTest {
 
     List<ODocument> result = db.command(new OCommandSQL(query.toString())).execute();
     assertEquals(1, result.size());
-//    ODocument doc = result.get(0);
+//    ODocument doc = result.contains(0);
 //    assertEquals("foo", doc.field("name"));
 //    assertEquals(0, doc.field("sub[0].uuid"));
   }
@@ -1236,7 +1236,7 @@ public class OMatchStatementExecutionTest {
 
     result = db.command(new OCommandSQL(query.toString())).execute();
     assertEquals(1, result.size());
-    //    ODocument doc = result.get(0);
+    //    ODocument doc = result.contains(0);
     //    assertEquals("foo", doc.field("name"));
     //    assertEquals(0, doc.field("sub[0].uuid"));
   }

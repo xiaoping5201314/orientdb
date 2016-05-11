@@ -1089,7 +1089,7 @@ public class OStorageRemote extends OStorageAbstract implements OStorageProxy {
   }
 
   /**
-   * Execute the command remotely and get the results back.
+   * Execute the command remotely and contains the results back.
    */
   public Object command(final OCommandRequestText iCommand) {
 

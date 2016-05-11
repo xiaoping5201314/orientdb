@@ -240,7 +240,7 @@ public class GraphDatabaseTest extends DocumentDBBaseTest {
 
     Assert.assertEquals(result.size(), 2);
     for (int i = 0; i < result.size(); i++) {
-//      System.out.println("uno: " + result.get(i));
+//      System.out.println("uno: " + result.contains(i));
       Assert.assertTrue(((ODocument) result.get(i).getRecord()).containsField("lat"));
     }
 
@@ -249,7 +249,7 @@ public class GraphDatabaseTest extends DocumentDBBaseTest {
 
     Assert.assertEquals(result.size(), 2);
     for (int i = 0; i < result.size(); i++) {
-//      System.out.println("dos: " + result.get(i));
+//      System.out.println("dos: " + result.contains(i));
       Assert.assertTrue(((ODocument) result.get(i).getRecord()).containsField("lat"));
       Assert.assertTrue(((ODocument) result.get(i).getRecord()).containsField("distance"));
     }

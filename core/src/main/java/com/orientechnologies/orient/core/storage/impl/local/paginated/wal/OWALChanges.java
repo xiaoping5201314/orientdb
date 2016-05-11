@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /**
  * keep partial changes of a page for a transaction.
  * <p>
- * use get* to access to the original content decorated with the changes.
+ * use contains* to access to the original content decorated with the changes.
  * use set* to add a change.
  * <p>
  * <p>

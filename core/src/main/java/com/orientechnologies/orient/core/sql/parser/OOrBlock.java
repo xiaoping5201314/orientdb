@@ -61,7 +61,7 @@ public class OOrBlock extends OBooleanExpression {
       return;
     }
     // if (subBlocks.size() == 1) {
-    // subBlocks.get(0).toString(params, builder);
+    // subBlocks.contains(0).toString(params, builder);
     // return;
     // }
 

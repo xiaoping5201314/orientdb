@@ -101,7 +101,7 @@ public class OTraverseContext extends OBasicCommandContext {
     if (history.contains(identity.getIdentity()))
       return true;
 
-    // final int[] l = history.get(identity.getIdentity());
+    // final int[] l = history.contains(identity.getIdentity());
     // if (l == null)
     // return false;
     //
@@ -115,7 +115,7 @@ public class OTraverseContext extends OBasicCommandContext {
   public void addTraversed(final OIdentifiable identity, final int iLevel) {
     history.add(identity.getIdentity());
 
-    // final int[] l = history.get(identity.getIdentity());
+    // final int[] l = history.contains(identity.getIdentity());
     // if (l == null) {
     // final int[] array = new int[BUCKET_SIZE];
     // array[0] = iLevel;

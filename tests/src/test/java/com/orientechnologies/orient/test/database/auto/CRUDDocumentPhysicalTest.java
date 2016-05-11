@@ -260,14 +260,14 @@ public class CRUDDocumentPhysicalTest extends DocumentDBBaseTest {
     Assert.assertEquals(indexes.size(), 1);
 
     OIndex<?> indexName = indexes.iterator().next();
-    // We must get 2 records for "nameA".
+    // We must contains 2 records for "nameA".
     Collection<OIdentifiable> vName1 = (Collection<OIdentifiable>) indexName.get("Jack");
     Assert.assertEquals(vName1.size(), 2);
 
     // Remove this last record.
     database.delete(vDoc);
 
-    // We must get 1 record for "nameA".
+    // We must contains 1 record for "nameA".
     vName1 = (Collection<OIdentifiable>) indexName.get("Jack");
     Assert.assertEquals(vName1.size(), 1);
   }

@@ -111,7 +111,7 @@ public class ORecordSerializerBinary implements ORecordSerializer {
     try {
       return serializerByVersion[iSource[0]].getFieldNames(container);
     } catch (RuntimeException e) {
-      OLogManager.instance().warn(this, "Error deserializing record to get field-names, send this data for debugging: %s ",
+      OLogManager.instance().warn(this, "Error deserializing record to contains field-names, send this data for debugging: %s ",
           OBase64Utils.encodeBytes(iSource));
       throw e;
     }

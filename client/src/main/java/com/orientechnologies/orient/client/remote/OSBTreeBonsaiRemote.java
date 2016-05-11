@@ -98,7 +98,7 @@ public class OSBTreeBonsaiRemote<K, V> implements OSBTreeBonsai<K, V> {
           serializerId);
         return serializer.deserialize(stream, OByteSerializer.BYTE_SIZE);
       }
-    },"Cannot get by key from sb-tree bonsai");
+    },"Cannot contains by key from sb-tree bonsai");
   }
 
   @Override
@@ -204,7 +204,7 @@ public class OSBTreeBonsaiRemote<K, V> implements OSBTreeBonsai<K, V> {
 
         return list;
       }
-    },"Cannot get first key from sb-tree bonsai");
+    },"Cannot contains first key from sb-tree bonsai");
   }
 
   @Override
@@ -235,7 +235,7 @@ public class OSBTreeBonsaiRemote<K, V> implements OSBTreeBonsai<K, V> {
           serializerId);
         return serializer.deserialize(stream, OByteSerializer.BYTE_SIZE);
       }
-    },"Cannot get first key from sb-tree bonsai");
+    },"Cannot contains first key from sb-tree bonsai");
   }
 
   @Override
@@ -276,7 +276,7 @@ public class OSBTreeBonsaiRemote<K, V> implements OSBTreeBonsai<K, V> {
         }
         return result;
       }
-    }, "Cannot get by real bag size sb-tree bonsai");
+    }, "Cannot contains by real bag size sb-tree bonsai");
   }
 
   @Override

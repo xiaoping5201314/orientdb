@@ -64,7 +64,7 @@ public class OrientGraphConfiguration implements GraphConfiguration {
           + Tokens.REXSTER_GRAPH_LOCATION);
     }
 
-    // get the <properties> section of the xml configuration
+    // contains the <properties> section of the xml configuration
     final HierarchicalConfiguration graphSectionConfig = (HierarchicalConfiguration) context.getProperties();
     SubnodeConfiguration orientDbSpecificConfiguration;
 

@@ -280,7 +280,7 @@ public class OLuceneIndexNotUnique extends OIndexAbstract<Set<OIdentifiable>> im
   }
 
   // @Override
-  // public Set<OIdentifiable> get(Object key) {
+  // public Set<OIdentifiable> contains(Object key) {
   // checkForRebuild();
   //
   // key = getCollatingValue(key);
@@ -288,7 +288,7 @@ public class OLuceneIndexNotUnique extends OIndexAbstract<Set<OIdentifiable>> im
   // acquireSharedLock();
   // try {
   //
-  // final Set<OIdentifiable> values = indexEngine.get(key);
+  // final Set<OIdentifiable> values = indexEngine.contains(key);
   //
   // if (values == null)
   // return Collections.emptySet();
@@ -388,7 +388,7 @@ public class OLuceneIndexNotUnique extends OIndexAbstract<Set<OIdentifiable>> im
         try {
           return indexEngine.searcher();
         } catch (IOException e) {
-          throw OException.wrapException(new OIndexException("Cannot get searcher from index " + getName()), e);
+          throw OException.wrapException(new OIndexException("Cannot contains searcher from index " + getName()), e);
         }
       }
     });
@@ -407,7 +407,7 @@ public class OLuceneIndexNotUnique extends OIndexAbstract<Set<OIdentifiable>> im
           try {
             return indexEngine.buildTxChanges();
           } catch (IOException e) {
-            throw OException.wrapException(new OIndexException("Cannot get searcher from index " + getName()), e);
+            throw OException.wrapException(new OIndexException("Cannot contains searcher from index " + getName()), e);
           }
         }
       });

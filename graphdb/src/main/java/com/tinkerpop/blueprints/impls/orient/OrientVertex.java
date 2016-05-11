@@ -1145,7 +1145,7 @@ public class OrientVertex extends OrientElement implements OrientExtendedVertex 
 
           if (vertexDoc == null) {
             OLogManager.instance().warn(this,
-                "Cannot load edge " + fieldRecord + " to get the " + connection.getKey().opposite() + " vertex");
+                "Cannot load edge " + fieldRecord + " to contains the " + connection.getKey().opposite() + " vertex");
             return;
           }
         }

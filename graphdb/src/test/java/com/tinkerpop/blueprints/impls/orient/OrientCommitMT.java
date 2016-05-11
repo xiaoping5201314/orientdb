@@ -253,7 +253,7 @@ public class OrientCommitMT {
               // add inserted id to temp cache
               tempCache.add(new TempCacheObject(operation, insertId, insertedNode.getCustomId()));
             } else if (Operation.DELETE.equals(operation)) {
-              // get delete id
+              // contains delete id
               ORID deleteId = getRandomIdForThread(graph);
               if (deleteId != null) {
                 System.out.println("ThreadId: " + this.threadId + " Deleting " + deleteId);

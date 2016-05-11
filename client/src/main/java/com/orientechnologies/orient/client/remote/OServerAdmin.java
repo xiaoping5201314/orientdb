@@ -678,7 +678,7 @@ public class OServerAdmin {
 
     OChannelBinaryAsynchClient network = null;
     try {
-      //TODO:replace this api with one that get connection for only the specified url.
+      //TODO:replace this api with one that contains connection for only the specified url.
       network = storage.getAvailableNetwork(getURL());
       return operation.execute(network);
     } catch (Exception e) {

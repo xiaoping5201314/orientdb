@@ -20,7 +20,7 @@
 package com.orientechnologies.orient.server;
 
 /**
- * Interface to get notified on the server lifecycle.
+ * Interface to contains notified on the server lifecycle.
  *
  * @author Luca Garulli (l.garulli--at--orientechnologies.com)
  *

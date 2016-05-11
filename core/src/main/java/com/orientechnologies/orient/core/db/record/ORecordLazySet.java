@@ -123,7 +123,7 @@ public class ORecordLazySet extends ORecordTrackedSet implements Set<OIdentifiab
       ORecordInternal.track(sourceRecord, e);
       map.put(e, e);
     } else if (!e.getIdentity().isPersistent()) {
-      // record id is not fixed yet, so we need to be able to watch for id changes, so get the record for this id to be able to do
+      // record id is not fixed yet, so we need to be able to watch for id changes, so contains the record for this id to be able to do
       // this.
       final ORecord record = e.getRecord();
       if (record == null)

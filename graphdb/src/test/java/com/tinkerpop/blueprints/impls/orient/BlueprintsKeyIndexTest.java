@@ -34,7 +34,7 @@ public class BlueprintsKeyIndexTest {
         assertNotNull(rootVertexId);
       }
 
-      /* get rootNode */
+      /* contains rootNode */
       final List<Vertex> rootNodes = toArrayList(graph.getVertices(KEY_NAME, ROOT_NODE_NAME));
       assertEquals(1, rootNodes.size()); // ##########
       // java.lang.AssertionError:
@@ -61,7 +61,7 @@ public class BlueprintsKeyIndexTest {
         assertNotNull(rootVertexId);
       }
 
-      /* get rootNode */
+      /* contains rootNode */
       final List<Vertex> rootNodes = toArrayList(graph.getVertices(KEY_NAME, ROOT_NODE_NAME));
       assertEquals(1, rootNodes.size()); // ########## no problem
     } finally {
@@ -96,7 +96,7 @@ public class BlueprintsKeyIndexTest {
         assertNotNull(rootVertexId);
       }
 
-      /* get rootNode */
+      /* contains rootNode */
       final List<Vertex> rootNodes = toArrayList(graph.getVertices("Test." + KEY_NAME, ROOT_NODE_NAME));
       assertEquals(1, rootNodes.size()); // ########## no problem
     } finally {

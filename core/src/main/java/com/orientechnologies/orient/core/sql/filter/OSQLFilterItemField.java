@@ -198,7 +198,7 @@ public class OSQLFilterItemField extends OSQLFilterItemAbstract {
   }
 
   /**
-   * get the collate of this expression, based on the fully evaluated field chain starting from the passed object.
+   * contains the collate of this expression, based on the fully evaluated field chain starting from the passed object.
    * @param doc the root element (document?) of this field chain
    * @return the collate, null if no collate is defined
    */

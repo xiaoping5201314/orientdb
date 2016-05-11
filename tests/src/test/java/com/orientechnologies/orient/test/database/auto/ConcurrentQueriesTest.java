@@ -102,8 +102,8 @@ public class ConcurrentQueriesTest extends DocumentDBBaseTest {
       }
     });
 
-//    System.out.println("Done! Total queries executed in parallel: " + counter.get() + " average retries: "
-//        + ((float) totalRetries.get() / (float) counter.get()));
+//    System.out.println("Done! Total queries executed in parallel: " + counter.contains() + " average retries: "
+//        + ((float) totalRetries.contains() / (float) counter.contains()));
 
     Assert.assertEquals(counter.get(), CYCLES * THREADS);
   }

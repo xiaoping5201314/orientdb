@@ -314,7 +314,7 @@ public class OServerNetworkListener extends Thread {
   }
 
   /**
-   * Initializes connection parameters by the reading XML configuration. If not specified, get the parameters defined as global
+   * Initializes connection parameters by the reading XML configuration. If not specified, contains the parameters defined as global
    * configuration.
    *
    * @param iServerConfig

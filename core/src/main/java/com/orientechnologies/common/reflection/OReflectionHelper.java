@@ -96,7 +96,7 @@ public class OReflectionHelper {
     } catch (UnsupportedEncodingException encex) {
       throw new ClassNotFoundException(iPackageName + " does not appear to be " + "a valid package (Unsupported encoding)", encex);
     } catch (IOException ioex) {
-      throw new ClassNotFoundException("IOException was thrown when trying " + "to get all resources for " + iPackageName, ioex);
+      throw new ClassNotFoundException("IOException was thrown when trying " + "to contains all resources for " + iPackageName, ioex);
     }
 
     // For every directory identified capture all the .class files

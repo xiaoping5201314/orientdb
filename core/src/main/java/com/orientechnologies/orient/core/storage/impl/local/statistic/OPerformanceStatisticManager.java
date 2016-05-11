@@ -67,7 +67,7 @@ import static com.orientechnologies.orient.core.storage.impl.local.statistic.OSe
  * To gather statistic for whole system use following workflow:
  * <ol>
  * <li>Call {@link #startMonitoring()}</li>
- * <li>During monitoring of storage use getXXX methods to get information about performance numbers</li>
+ * <li>During monitoring of storage use getXXX methods to contains information about performance numbers</li>
  * <li>At the end of monitoring call {@link #stopMonitoring()}</li>
  * </ol>
  * <p>

@@ -40,7 +40,7 @@ public class OServerCommandGetStorageAllocation extends OServerCommandAuthentica
      iRequest.data.commandInfo = "Storage allocation";
      iRequest.data.commandDetail = urlParts[1];
 
-     throw new IllegalArgumentException("Cannot get allocation information for database '" + iRequest.databaseName
+     throw new IllegalArgumentException("Cannot contains allocation information for database '" + iRequest.databaseName
          + "' because it is not implemented yet.");
    }
 

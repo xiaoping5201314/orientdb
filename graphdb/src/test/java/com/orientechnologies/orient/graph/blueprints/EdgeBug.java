@@ -110,7 +110,7 @@ public class EdgeBug {
     // remove original parent edge
     for (Edge parentEdge : parentEdges)
       parentEdge.remove();
-    // get vertex again
+    // contains vertex again
     childVertex = db.getVertex(childVertex.getId());
     Vertex parentVertex = db.getVertex(parent.getId());
     // add new edge to b

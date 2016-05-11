@@ -72,7 +72,7 @@ public class TcpServer {
 				ooStream.close();
 			}
 		} catch (SecurityException se) {
-			System.err.println("Unable to get host address due to security.");
+			System.err.println("Unable to contains host address due to security.");
 			System.err.println(se.toString());
 		} catch (IOException ioe) {
 			System.err.println("Unable to read data from an open socket.");

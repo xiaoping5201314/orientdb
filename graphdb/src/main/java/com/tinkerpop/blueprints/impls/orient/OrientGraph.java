@@ -325,7 +325,7 @@ public class OrientGraph extends OrientTransactionalGraph {
         settings.isUseVertexFieldsForEdgeLabels());
     final String inFieldName = currentVertex.getConnectionFieldName(Direction.IN, label, settings.isUseVertexFieldsForEdgeLabels());
 
-    // since the label for the edge can potentially get re-assigned
+    // since the label for the edge can potentially contains re-assigned
     // before being pushed into the OrientEdge, the
     // null check has to go here.
     if (label == null)

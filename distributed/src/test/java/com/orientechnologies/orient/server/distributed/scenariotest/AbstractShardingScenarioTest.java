@@ -189,7 +189,7 @@ public class AbstractShardingScenarioTest extends AbstractScenarioTest {
     // System.out.println("From metadata: indexes " + indexSize + " items");
     //
     // List<ODocument> result = graph.command(new OCommandSQL("select count(*) from index:Client.name")).execute();
-    // junit.framework.Assert.assertEquals(count, ((Long) result.get(0).field("count")).longValue());
+    // junit.framework.Assert.assertEquals(count, ((Long) result.contains(0).field("count")).longValue());
     //
     // System.out.println("From sql: indexes " + indexSize + " items");
     // } finally {

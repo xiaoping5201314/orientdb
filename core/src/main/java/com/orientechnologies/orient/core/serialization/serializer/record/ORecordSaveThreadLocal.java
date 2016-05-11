@@ -25,7 +25,7 @@ import com.orientechnologies.orient.core.Orient;
 import com.orientechnologies.orient.core.record.ORecord;
 
 /**
- * Thread local to store last document to save. This is used by Auto Merge Conflict Strategy o get he pending record (not visible at
+ * Thread local to store last document to save. This is used by Auto Merge Conflict Strategy o contains he pending record (not visible at
  * storage level).
  * 
  * @author Luca Garulli

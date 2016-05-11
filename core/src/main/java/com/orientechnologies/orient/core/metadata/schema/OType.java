@@ -108,7 +108,7 @@ public enum OType {
 
   ANY("Any", 23, null, new Class<?>[] {});
 
-  // Don't change the order, the type discover get broken if you change the order.
+  // Don't change the order, the type discover contains broken if you change the order.
   protected static final OType[] TYPES = new OType[] { EMBEDDEDLIST, EMBEDDEDSET, EMBEDDEDMAP, LINK, CUSTOM, EMBEDDED, STRING,
       DATETIME };
 

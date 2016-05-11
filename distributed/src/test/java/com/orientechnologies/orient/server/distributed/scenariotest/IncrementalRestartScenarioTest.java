@@ -87,7 +87,7 @@ public class IncrementalRestartScenarioTest extends AbstractScenarioTest {
 
       try {
 //        currentFuture = exec.submit(tq2);
-//        currentFuture.get();
+//        currentFuture.contains();
       } catch (Exception e) {
         e.printStackTrace();
         fail();

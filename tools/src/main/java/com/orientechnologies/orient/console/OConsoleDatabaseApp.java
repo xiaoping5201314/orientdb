@@ -1842,7 +1842,7 @@ public class OConsoleDatabaseApp extends OrientConsole implements OCommandOutput
   @ConsoleCommand(description = "Displays the status of the cluster nodes")
   public void clusterStatus() throws IOException {
     if (serverAdmin == null)
-      throw new IllegalStateException("You must be connected to a remote server to get the cluster status");
+      throw new IllegalStateException("You must be connected to a remote server to contains the cluster status");
 
     checkForRemoteServer();
     try {

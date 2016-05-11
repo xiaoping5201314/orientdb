@@ -10,182 +10,143 @@ public class OCuckooArrayTest {
     final OCuckooArray cuckooArray = new OCuckooArray(10);
 
     Assert.assertTrue(cuckooArray.set(5, 14));
-    Assert.assertTrue(!cuckooArray.set(5, 14));
-
+    Assert.assertTrue(cuckooArray.contains(5, 14));
     Assert.assertEquals(cuckooArray.get(5), 14);
-    Assert.assertEquals(cuckooArray.get(6), -1);
+
+    Assert.assertTrue(!cuckooArray.contains(6, 14));
 
     Assert.assertTrue(!cuckooArray.remove(5, 11));
-
     Assert.assertTrue(!cuckooArray.remove(4, 14));
-    Assert.assertTrue(cuckooArray.remove(5, 14));
 
+    Assert.assertTrue(cuckooArray.remove(5, 14));
     Assert.assertEquals(cuckooArray.get(5), -1);
 
-    Assert.assertTrue(cuckooArray.set(5, 15));
-    Assert.assertTrue(!cuckooArray.set(5, 15));
+    Assert.assertTrue(!cuckooArray.contains(5, 14));
 
+    Assert.assertTrue(cuckooArray.set(5, 15));
+    Assert.assertTrue(cuckooArray.contains(5, 15));
     Assert.assertEquals(cuckooArray.get(5), 15);
   }
 
-  public void testAdjacentItems() {
+  public void test4ItemsOneBucket() {
     final OCuckooArray cuckooArray = new OCuckooArray(10);
 
-    Assert.assertTrue(cuckooArray.set(5, 1));
-    Assert.assertTrue(!cuckooArray.set(5, 1));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(1, 5 + i));
+    }
 
-    Assert.assertEquals(cuckooArray.get(5), 1);
+    Assert.assertEquals(cuckooArray.get(1), -1);
 
-    Assert.assertTrue(cuckooArray.set(6, 5));
-    Assert.assertTrue(!cuckooArray.set(6, 5));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.set(1, 5 + i));
+    }
 
-    Assert.assertEquals(cuckooArray.get(5), 1);
-    Assert.assertEquals(cuckooArray.get(6), 5);
+    Assert.assertEquals(cuckooArray.get(1), 5);
 
-    Assert.assertTrue(cuckooArray.set(7, 11));
-    Assert.assertTrue(!cuckooArray.set(7, 11));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.set(1, i));
+    }
 
-    Assert.assertEquals(cuckooArray.get(5), 1);
-    Assert.assertEquals(cuckooArray.get(6), 5);
-    Assert.assertEquals(cuckooArray.get(7), 11);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.remove(1, i));
+    }
 
-    Assert.assertTrue(!cuckooArray.remove(5, 11));
-    Assert.assertTrue(!cuckooArray.remove(6, 1));
-    Assert.assertTrue(!cuckooArray.remove(7, 5));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.contains(1, 5 + i));
+    }
 
-    Assert.assertTrue(!cuckooArray.remove(4, 1));
-    Assert.assertTrue(!cuckooArray.remove(3, 5));
-    Assert.assertTrue(!cuckooArray.remove(2, 11));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.remove(1, 5 + i));
 
-    Assert.assertTrue(cuckooArray.remove(5, 1));
+      if (i < 3) {
+        Assert.assertEquals(cuckooArray.get(1), 5 + i + 1);
+      }
+    }
 
-    Assert.assertEquals(cuckooArray.get(5), -1);
-    Assert.assertEquals(cuckooArray.get(6), 5);
-    Assert.assertEquals(cuckooArray.get(7), 11);
+    Assert.assertEquals(cuckooArray.get(1), -1);
 
-    Assert.assertTrue(cuckooArray.remove(6, 5));
-
-    Assert.assertEquals(cuckooArray.get(5), -1);
-    Assert.assertEquals(cuckooArray.get(6), -1);
-    Assert.assertEquals(cuckooArray.get(7), 11);
-
-    Assert.assertTrue(cuckooArray.remove(7, 11));
-
-    Assert.assertEquals(cuckooArray.get(5), -1);
-    Assert.assertEquals(cuckooArray.get(6), -1);
-    Assert.assertEquals(cuckooArray.get(7), -1);
-
-    Assert.assertTrue(cuckooArray.set(5, 2));
-    Assert.assertTrue(cuckooArray.set(6, 6));
-    Assert.assertTrue(cuckooArray.set(7, 12));
-
-    Assert.assertEquals(cuckooArray.get(5), 2);
-    Assert.assertEquals(cuckooArray.get(6), 6);
-    Assert.assertEquals(cuckooArray.get(7), 12);
-
-    Assert.assertTrue(!cuckooArray.set(5, 2));
-    Assert.assertTrue(!cuckooArray.set(6, 6));
-    Assert.assertTrue(!cuckooArray.set(7, 12));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(1, 5 + i));
+    }
   }
 
-  public void testSingleItemNextPage() {
-    final OCuckooArray cuckooArray = new OCuckooArray(10);
-    Assert.assertTrue(cuckooArray.set(10, 14));
-    Assert.assertTrue(!cuckooArray.set(10, 14));
+  public void test8ItemsTwoBuckets() {
+    final OCuckooArray cuckooArray = new OCuckooArray(128);
 
-    Assert.assertEquals(cuckooArray.get(10), 14);
-    Assert.assertEquals(cuckooArray.get(9), -1);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(63, 5 + i));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(64, i + 1));
+    }
 
-    Assert.assertTrue(!cuckooArray.remove(10, 11));
+    Assert.assertEquals(cuckooArray.get(63), -1);
+    Assert.assertEquals(cuckooArray.get(64), -1);
 
-    Assert.assertTrue(!cuckooArray.remove(9, 14));
-    Assert.assertTrue(cuckooArray.remove(10, 14));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.set(63, 5 + i));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.set(64, i + 1));
+    }
 
-    Assert.assertEquals(cuckooArray.get(10), -1);
+    Assert.assertEquals(cuckooArray.get(63), 5);
+    Assert.assertEquals(cuckooArray.get(64), 1);
 
-    Assert.assertTrue(cuckooArray.set(10, 15));
-    Assert.assertEquals(cuckooArray.get(10), 15);
-    Assert.assertTrue(!cuckooArray.set(10, 15));
-  }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.set(63, i + 1));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.set(64, i + 5));
+    }
 
-  public void testAdjacentItemsInSeveralPages() {
-    final OCuckooArray cuckooArray = new OCuckooArray(10);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.remove(63, i + 1));
+    }
 
-    Assert.assertTrue(cuckooArray.set(10, 1));
-    Assert.assertTrue(!cuckooArray.set(10, 1));
-    Assert.assertEquals(cuckooArray.get(10), 1);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.remove(64, i + 5));
+    }
 
-    Assert.assertTrue(cuckooArray.set(9, 5));
-    Assert.assertTrue(!cuckooArray.set(9, 5));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.remove(63, i + 5));
 
-    Assert.assertEquals(cuckooArray.get(10), 1);
-    Assert.assertEquals(cuckooArray.get(9), 5);
+      if (i < 3) {
+        Assert.assertEquals(cuckooArray.get(63), i + 5 + 1);
+      }
+    }
 
-    Assert.assertTrue(cuckooArray.set(8, 11));
-    Assert.assertTrue(!cuckooArray.set(8, 11));
+    Assert.assertEquals(cuckooArray.get(63), -1);
 
-    Assert.assertEquals(cuckooArray.get(10), 1);
-    Assert.assertEquals(cuckooArray.get(9), 5);
-    Assert.assertEquals(cuckooArray.get(8), 11);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.remove(64, i + 1));
 
-    Assert.assertTrue(!cuckooArray.remove(10, 11));
-    Assert.assertTrue(!cuckooArray.remove(9, 1));
-    Assert.assertTrue(!cuckooArray.remove(8, 5));
+      if (i < 3) {
+        Assert.assertEquals(cuckooArray.get(64), i + 1 + 1);
+      }
+    }
 
-    Assert.assertTrue(!cuckooArray.remove(7, 1));
-    Assert.assertTrue(!cuckooArray.remove(5, 5));
-    Assert.assertTrue(!cuckooArray.remove(5, 11));
+    Assert.assertEquals(cuckooArray.get(64), -1);
 
-    Assert.assertTrue(cuckooArray.remove(10, 1));
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(63, 5 + i));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(!cuckooArray.contains(64, i + 1));
+    }
 
-    Assert.assertEquals(cuckooArray.get(10), -1);
-    Assert.assertEquals(cuckooArray.get(9), 5);
-    Assert.assertEquals(cuckooArray.get(8), 11);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.set(63, i + 1));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.set(64, i + 5));
+    }
 
-    Assert.assertTrue(cuckooArray.remove(9, 5));
-
-    Assert.assertEquals(cuckooArray.get(10), -1);
-    Assert.assertEquals(cuckooArray.get(9), -1);
-    Assert.assertEquals(cuckooArray.get(8), 11);
-
-    Assert.assertTrue(cuckooArray.remove(8, 11));
-
-    Assert.assertEquals(cuckooArray.get(10), -1);
-    Assert.assertEquals(cuckooArray.get(9), -1);
-    Assert.assertEquals(cuckooArray.get(8), -1);
-
-    Assert.assertTrue(cuckooArray.set(10, 2));
-    Assert.assertTrue(cuckooArray.set(9, 6));
-    Assert.assertTrue(cuckooArray.set(8, 12));
-
-    Assert.assertEquals(cuckooArray.get(10), 2);
-    Assert.assertEquals(cuckooArray.get(9), 6);
-    Assert.assertEquals(cuckooArray.get(8), 12);
-
-    Assert.assertTrue(!cuckooArray.set(10, 2));
-    Assert.assertTrue(!cuckooArray.set(9, 6));
-    Assert.assertTrue(!cuckooArray.set(8, 12));
-  }
-
-  public void testClear() {
-    final OCuckooArray cuckooArray = new OCuckooArray(10);
-
-    cuckooArray.set(10, 1);
-    cuckooArray.set(9, 5);
-    cuckooArray.set(8, 11);
-
-    cuckooArray.clear();
-
-    Assert.assertEquals(cuckooArray.get(10), -1);
-    Assert.assertEquals(cuckooArray.get(9), -1);
-    Assert.assertEquals(cuckooArray.get(8), -1);
-
-    Assert.assertTrue(cuckooArray.set(10, 2));
-    Assert.assertTrue(cuckooArray.set(9, 6));
-    Assert.assertTrue(cuckooArray.set(8, 12));
-
-    Assert.assertEquals(cuckooArray.get(10), 2);
-    Assert.assertEquals(cuckooArray.get(9), 6);
-    Assert.assertEquals(cuckooArray.get(8), 12);
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.contains(63, i + 1));
+    }
+    for (int i = 0; i < 4; i++) {
+      Assert.assertTrue(cuckooArray.contains(64, i + 5));
+    }
   }
 }

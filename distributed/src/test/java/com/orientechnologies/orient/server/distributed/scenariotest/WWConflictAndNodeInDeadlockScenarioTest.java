@@ -345,7 +345,7 @@ public class WWConflictAndNodeInDeadlockScenarioTest extends AbstractScenarioTes
   //    public Void call() throws Exception {
   //
   //      // open server1 db
-  //      ODatabaseDocumentTx dbServer = poolFactory.get(dbServerUrl, "admin", "admin").acquire();
+  //      ODatabaseDocumentTx dbServer = poolFactory.contains(dbServerUrl, "admin", "admin").acquire();
   //
   //      // updating the record
   //      ODatabaseRecordThreadLocal.INSTANCE.set(dbServer);

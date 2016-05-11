@@ -154,7 +154,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   protected void execute() throws Exception {
     requestType = -1;
 
-    // do not remove this or we will get deadlock upon shutdown.
+    // do not remove this or we will contains deadlock upon shutdown.
     if (isShutdownFlag())
       return;
 
@@ -1157,7 +1157,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   protected void configList(OClientConnection connection) throws IOException {
     setDataCommandInfo(connection, "List config");
 
-    checkServerAccess("server.config.get", connection);
+    checkServerAccess("server.config.contains", connection);
 
     beginResponse();
     try {
@@ -1218,7 +1218,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   protected void configGet(OClientConnection connection) throws IOException {
     setDataCommandInfo(connection, "Get config");
 
-    checkServerAccess("server.config.get", connection);
+    checkServerAccess("server.config.contains", connection);
 
     final String key = channel.readString();
     final OGlobalConfiguration cfg = OGlobalConfiguration.findByKey(key);
@@ -2087,7 +2087,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   }
 
   private void ridBagSize(OClientConnection connection) throws IOException {
-    setDataCommandInfo(connection, "RidBag get size");
+    setDataCommandInfo(connection, "RidBag contains size");
 
     OBonsaiCollectionPointer collectionPointer = OCollectionNetworkSerializer.INSTANCE.readCollectionPointer(channel);
     final byte[] changeStream = channel.readBytes();
@@ -2113,7 +2113,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   }
 
   private void sbTreeBonsaiGetEntriesMajor(OClientConnection connection) throws IOException {
-    setDataCommandInfo(connection, "SB-Tree bonsai get values major");
+    setDataCommandInfo(connection, "SB-Tree bonsai contains values major");
 
     OBonsaiCollectionPointer collectionPointer = OCollectionNetworkSerializer.INSTANCE.readCollectionPointer(channel);
     byte[] keyStream = channel.readBytes();
@@ -2169,7 +2169,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   }
 
   private void sbTreeBonsaiFirstKey(OClientConnection connection) throws IOException {
-    setDataCommandInfo(connection, "SB-Tree bonsai get first key");
+    setDataCommandInfo(connection, "SB-Tree bonsai contains first key");
 
     OBonsaiCollectionPointer collectionPointer = OCollectionNetworkSerializer.INSTANCE.readCollectionPointer(channel);
 
@@ -2201,7 +2201,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   }
 
   private void sbTreeBonsaiGet(OClientConnection connection) throws IOException {
-    setDataCommandInfo(connection, "SB-Tree bonsai get");
+    setDataCommandInfo(connection, "SB-Tree bonsai contains");
 
     OBonsaiCollectionPointer collectionPointer = OCollectionNetworkSerializer.INSTANCE.readCollectionPointer(channel);
     final byte[] keyStream = channel.readBytes();

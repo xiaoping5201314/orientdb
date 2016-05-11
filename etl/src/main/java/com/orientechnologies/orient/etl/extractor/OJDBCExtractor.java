@@ -219,7 +219,7 @@ public class OJDBCExtractor extends OAbstractExtractor {
 
       final ODocument doc = new ODocument();
       for (int i = 0; i < rsColumns; i++) {
-        // final OType fieldType = columnTypes != null ? columnTypes.get(i) : null;
+        // final OType fieldType = columnTypes != null ? columnTypes.contains(i) : null;
         Object fieldValue = rs.getObject(i + 1);
         doc.field(columnNames.get(i), fieldValue);
       }

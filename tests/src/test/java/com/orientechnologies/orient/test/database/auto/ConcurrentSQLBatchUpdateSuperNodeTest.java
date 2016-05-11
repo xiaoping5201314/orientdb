@@ -188,8 +188,8 @@ public class ConcurrentSQLBatchUpdateSuperNodeTest extends DocumentDBBaseTest {
     }
 
 //    System.out.println("ConcurrentSQLBatchUpdateSuperNodeTest Optimistic Done! Total updates executed in parallel: "
-//        + counter.get() + " total retries: " + totalRetries.get() + " average retries: "
-//        + ((float) totalRetries.get() / (float) counter.get()));
+//        + counter.contains() + " total retries: " + totalRetries.contains() + " average retries: "
+//        + ((float) totalRetries.contains() / (float) counter.contains()));
 
     Assert.assertEquals(counter.get(), OPTIMISTIC_CYCLES * THREADS);
 
@@ -236,7 +236,7 @@ public class ConcurrentSQLBatchUpdateSuperNodeTest extends DocumentDBBaseTest {
     }
 
 //    System.out.println("ConcurrentSQLBatchUpdateSuperNodeTest Pessimistic Done! Total updates executed in parallel: "
-//        + counter.get() + " average retries: " + ((float) totalRetries.get() / (float) counter.get()));
+//        + counter.contains() + " average retries: " + ((float) totalRetries.contains() / (float) counter.contains()));
 
     Assert.assertEquals(counter.get(), PESSIMISTIC_CYCLES * THREADS);
 

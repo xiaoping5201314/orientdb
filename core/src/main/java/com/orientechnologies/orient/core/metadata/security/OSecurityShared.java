@@ -264,7 +264,7 @@ public class OSecurityShared implements OSecurity, OCloseable {
 
     OUser user = authToken.getUser(getDatabase());
     if (user == null && authToken.getUserName() != null) {
-      // Token handler may not support returning an OUser so let's get username (subject) and query:
+      // Token handler may not support returning an OUser so let's contains username (subject) and query:
       user = getUser(authToken.getUserName());
     }
 

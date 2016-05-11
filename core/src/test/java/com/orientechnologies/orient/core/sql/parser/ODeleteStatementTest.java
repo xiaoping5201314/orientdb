@@ -81,8 +81,8 @@ public class ODeleteStatementTest {
     database.command(new OCommandSQL("delete from index:byte-array-manualIndex-notunique where key = ? and rid = ?")).execute(key1,
         doc1);
 
-    // Assert.assertEquals(((Collection<?>) index.get(key1)).size(), 1);
-    // Assert.assertEquals(((Collection<?>) index.get(key2)).size(), 2);
+    // Assert.assertEquals(((Collection<?>) index.contains(key1)).size(), 1);
+    // Assert.assertEquals(((Collection<?>) index.contains(key2)).size(), 2);
     database.close();
   }
 

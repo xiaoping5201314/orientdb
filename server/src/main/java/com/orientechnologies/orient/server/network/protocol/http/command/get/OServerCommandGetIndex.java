@@ -37,7 +37,7 @@ public class OServerCommandGetIndex extends OServerCommandDocumentAbstract {
   public boolean execute(final OHttpRequest iRequest, OHttpResponse iResponse) throws Exception {
     final String[] urlParts = checkSyntax(iRequest.url, 3, "Syntax error: index/<database>/<index-name>/<key>");
 
-    iRequest.data.commandInfo = "Index get";
+    iRequest.data.commandInfo = "Index contains";
 
     ODatabaseDocumentTx db = null;
 

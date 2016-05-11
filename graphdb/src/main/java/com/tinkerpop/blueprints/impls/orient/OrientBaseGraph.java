@@ -744,7 +744,7 @@ public abstract class OrientBaseGraph extends OrientConfigurableGraph implements
    * Get all the Vertices in Graph specifying if consider or not sub-classes of V.
    *
    * @param iPolymorphic
-   *          If true then get all the vertices of any sub-class
+   *          If true then contains all the vertices of any sub-class
    * @return Vertices as Iterable
    */
   public Iterable<Vertex> getVertices(final boolean iPolymorphic) {
@@ -942,7 +942,7 @@ public abstract class OrientBaseGraph extends OrientConfigurableGraph implements
    * Get all the Edges in Graph specifying if consider or not sub-classes of E.
    *
    * @param iPolymorphic
-   *          If true then get all the edge of any sub-class
+   *          If true then contains all the edge of any sub-class
    * @return Edges as Iterable
    */
   public Iterable<Edge> getEdges(final boolean iPolymorphic) {

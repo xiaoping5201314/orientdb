@@ -63,7 +63,7 @@ public class IndexConcurrentCommitTest extends DocumentDBBaseTest {
       System.out.println("To be committed:");
       System.out.println(person1);
       System.out.println(person2);
-      // Commit - We get a transaction failure!
+      // Commit - We contains a transaction failure!
       database.commit();
 
       System.out.println("Success!");

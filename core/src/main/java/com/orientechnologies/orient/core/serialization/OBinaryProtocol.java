@@ -180,7 +180,7 @@ public class OBinaryProtocol {
     // index output[]
     int j = 0;
     while (i < iLenght + iBeginOffset) {
-      // get next byte unsigned
+      // contains next byte unsigned
       int b = input[i++] & 0xff;
       // classify based on the high order 3 bits
       switch (b >>> 5) {
