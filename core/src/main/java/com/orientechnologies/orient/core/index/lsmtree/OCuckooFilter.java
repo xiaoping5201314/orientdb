@@ -26,7 +26,7 @@ public class OCuckooFilter {
   private int size;
 
   public OCuckooFilter(int capacity) {
-    final int arrayCapacity = (int) Math.ceil((capacity << 1) * EXPECTED_LOAD_FACTOR);
+    final int arrayCapacity = (int) Math.ceil((capacity << 1) / EXPECTED_LOAD_FACTOR);
 
     firstArray = new OCuckooArray(arrayCapacity);
     secondArray = new OCuckooArray(arrayCapacity);
@@ -79,9 +79,9 @@ public class OCuckooFilter {
   private boolean set(int firstIndex, int secondIndex, int fingerprint) {
     boolean inserted;
 
-    inserted = firstArray.set(firstIndex, fingerprint);
+    inserted = firstArray.add(firstIndex, fingerprint);
     if (!inserted) {
-      inserted = secondArray.set(secondIndex, fingerprint);
+      inserted = secondArray.add(secondIndex, fingerprint);
     }
 
     if (!inserted) {
@@ -108,7 +108,7 @@ public class OCuckooFilter {
 
     final boolean result;
     if (first) {
-      if (firstArray.set(index, fingerPrint))
+      if (firstArray.add(index, fingerPrint))
         return true;
 
       final int nextFingerprint = firstArray.get(index);
@@ -117,12 +117,12 @@ public class OCuckooFilter {
       result = move(nextFingerprint, nextIndex, false, counter + 1);
       if (result) {
         firstArray.remove(index, nextFingerprint);
-        firstArray.set(index, fingerPrint);
+        firstArray.add(index, fingerPrint);
       }
 
       return result;
     } else {
-      if (secondArray.set(index, fingerPrint))
+      if (secondArray.add(index, fingerPrint))
         return true;
 
       final int nextFingerprint = secondArray.get(index);
@@ -131,7 +131,7 @@ public class OCuckooFilter {
       result = move(nextFingerprint, nextIndex, true, counter + 1);
       if (result) {
         secondArray.remove(index, nextFingerprint);
-        secondArray.set(index, fingerPrint);
+        secondArray.add(index, fingerPrint);
       }
 
       return result;
