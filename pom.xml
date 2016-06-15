@@ -23,8 +23,8 @@
     <url>http://www.orientechnologies.com</url>
     <inceptionYear>2009</inceptionYear>
     <organization>
-        <name>Orient Technologies</name>
-        <url>http://www.orientechnologies.com</url>
+        <name>OrientDB</name>
+        <url>http://orientdb.com</url>
     </organization>
     <licenses>
         <license>
@@ -140,6 +140,7 @@
             <id>sonatype-nexus-snapshots</id>
             <name>OrientDB Maven2 Snapshot Repository</name>
             <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <uniqueVersion>false</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
     <repositories>
@@ -327,12 +328,12 @@
                     <version>1.13</version>
                     <configuration>
                         <!--
-                        Keep aligned with the maven-compiler-plugins source/target, ATM this is 1.8,
-                        so we use the java18 signature.
+                        Keep aligned with the maven-compiler-plugins source/target, ATM this is 1.6,
+                        so we use the java16 signature.
                         -->
                         <signature>
                             <groupId>org.codehaus.mojo.signature</groupId>
-                            <artifactId>java18</artifactId>
+                            <artifactId>java16</artifactId>
                             <version>1.1</version>
                         </signature>
                     </configuration>
@@ -425,7 +426,7 @@
                         <_nouses>true</_nouses>
                         <!-- | Stop the JAVA_1_n_HOME variables from being 
                             treated as headers by Bnd -->
-                        <_removeheaders>JAVA_1_3_HOME,JAVA_1_4_HOME,JAVA_1_5_HOME,JAVA_1_6_HOME,JAVA_1_7_HOME,JAVA_1_8_HOME,
+                        <_removeheaders>JAVA_1_3_HOME,JAVA_1_4_HOME,JAVA_1_5_HOME,JAVA_1_6_HOME,JAVA_1_7_HOME,
                             Bnd-LastModified,Built-By,Private-Package,Tool,Created-By,Build-Jdk,Include-Resource,
                             Ignore-Package,Private-Package,Bundle-DocURL
                         </_removeheaders>
@@ -434,7 +435,7 @@
                         <Private-Package>${osgi.private}</Private-Package>
                         <Import-Package>${project.groupId}.*;provide:=true,${osgi.import}</Import-Package>
                         <DynamicImport-Package>${osgi.dynamicImport}</DynamicImport-Package>
-                        <Bundle-RequiredExecutionEnvironment>JavaSE-1.8</Bundle-RequiredExecutionEnvironment>
+                        <Bundle-RequiredExecutionEnvironment>JavaSE-1.6</Bundle-RequiredExecutionEnvironment>
                     </instructions>
                 </configuration>
                 <executions>
@@ -494,11 +495,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.7.5.201505241946</version>
-                <configuration>
-                    <destFile>${project.basedir}/../target/jacoco.exec</destFile>
-                    <dataFile>${project.basedir}/../target/jacoco.exec</dataFile>
-                </configuration>
+                <version>0.7.6.201602180812</version>
             </plugin>
 
             <plugin>

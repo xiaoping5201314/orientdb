@@ -47,6 +47,7 @@ public class OrientGraphMultithreadRemoteTest {
   public static void stopEmbeddedServer() throws Exception {
     server.shutdown();
     Thread.sleep(1000);
+    Orient.instance().closeAllStorages();
 
     if (oldOrientDBHome != null)
       System.setProperty("ORIENTDB_HOME", oldOrientDBHome);
@@ -82,7 +83,6 @@ public class OrientGraphMultithreadRemoteTest {
   }
 
   @Test
-  @Ignore
   public void testThreadingInsert() throws InterruptedException {
     List<Thread> threads = new ArrayList<Thread>();
     int threadCount = 8;

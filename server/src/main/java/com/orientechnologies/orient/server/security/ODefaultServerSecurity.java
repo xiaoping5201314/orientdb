@@ -19,12 +19,14 @@
  */
 package com.orientechnologies.orient.server.security;
 
+import com.orientechnologies.common.io.OIOUtils;
 import com.orientechnologies.common.log.OLogManager;
 import com.orientechnologies.common.parser.OSystemVariableResolver;
 import com.orientechnologies.common.util.OCallable;
 import com.orientechnologies.orient.core.Orient;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.db.ODatabase;
+import com.orientechnologies.orient.core.db.ODatabaseDocumentInternal;
 import com.orientechnologies.orient.core.db.ODatabaseRecordThreadLocal;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.metadata.schema.OType;
@@ -33,6 +35,7 @@ import com.orientechnologies.orient.core.metadata.security.OSecurityExternal;
 import com.orientechnologies.orient.core.metadata.security.OSystemUser;
 import com.orientechnologies.orient.core.metadata.security.OUser;
 import com.orientechnologies.orient.core.record.impl.ODocument;
+import com.orientechnologies.orient.core.security.OAuditingOperation;
 import com.orientechnologies.orient.core.security.OInvalidPasswordException;
 import com.orientechnologies.orient.core.security.OSecurityFactory;
 import com.orientechnologies.orient.core.security.OSecurityManager;
@@ -198,9 +201,12 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
           if (sa.isEnabled()) {
             String sah = sa.getAuthenticationHeader(databaseName);
 
-            if (sah != null) {
+            if (sah != null && sah.trim().length() > 0) {
+              // If we're not the first authenticator, then append "\n".
+              if (sb.length() > 0) {
+                sb.append("\n");
+              }
               sb.append(sah);
-              sb.append("\n");
             }
           }
         }
@@ -276,7 +282,7 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
    */
   public OUser getSystemUser(final String username, final String dbName) {
     if (isEnabled()) {
-      return (OUser) server.executeSystemDatabaseCommand(new OCallable<Object, Object>() {
+      return (OUser) server.getSystemDatabase().execute(new OCallable<Object, Object>() {
         @Override
         public Object call(Object iArgument) {
           final List<ODocument> result = (List<ODocument>) iArgument;
@@ -284,7 +290,7 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
             return new OSystemUser(result.get(0), dbName);
           return null;
         }
-      }, superUser, "select from OUser where name = ? limit 1 fetchplan roles:1", username);
+      }, "select from OUser where name = ? limit 1 fetchplan roles:1", username);
     }
     return null;
   }
@@ -437,6 +443,14 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
   }
 
   // OSecuritySystem
+  public void log(final OAuditingOperation operation, final String dbName, final String username, final String message) {
+    synchronized (auditingSynch) {
+      if (auditingService != null)
+        auditingService.log(operation, dbName, username, message);
+    }
+  }
+
+  // OSecuritySystem
   public void registerSecurityClass(final Class<?> cls) {
     String fullTypeName = getFullTypeName(cls);
 
@@ -483,10 +497,7 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
 
       onAfterActivate();
 
-      synchronized (auditingSynch) {
-        if (auditingService != null)
-          auditingService.log("Reload Security", "The security configuration file has been reloaded");
-      }
+      log(OAuditingOperation.RELOADEDSECURITY, null, null, "The security configuration file has been reloaded");
     } else {
       OLogManager.instance().error(this, "ODefaultServerSecurity.reload(ODocument) The provided configuration document is null");
       throw new OSecuritySystemException("ODefaultServerSecurity.reload(ODocument) The provided configuration document is null");
@@ -502,9 +513,11 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
     if (name.equalsIgnoreCase("auditing")) {
       auditingDoc = jsonConfig;
       reloadAuditingService();
+
     } else if (name.equalsIgnoreCase("authentication")) {
       authDoc = jsonConfig;
       reloadAuthMethods();
+
     } else if (name.equalsIgnoreCase("ldapImporter")) {
       ldapImportDoc = jsonConfig;
       reloadImportLDAP();
@@ -515,6 +528,9 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
       serverDoc = jsonConfig;
       reloadServer();
     }
+    setSection(name, jsonConfig);
+
+    log(OAuditingOperation.RELOADEDSECURITY, null, null, String.format("The %s security component has been reloaded", name));
   }
 
   /**
@@ -535,7 +551,7 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
           if (ccm != null) {
             for (OClientConnection cc : ccm.getConnections()) {
               try {
-                ODatabaseDocumentTx ccDB = cc.getDatabase();
+                ODatabaseDocumentInternal ccDB = cc.getDatabase();
                 if (ccDB != null) {
                   ccDB.activateOnCurrentThread();
                   if (!ccDB.isClosed() && ccDB.getURL() != null) {
@@ -658,9 +674,11 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
 
       if (isEnabled()) {
         registerRESTCommands();
+
+        log(OAuditingOperation.SECURITY, null, null, "The security module is now loaded");
       }
     } else {
-      OLogManager.instance().error(this, "ODefaultServerSecurity.onAfterActivate() Configuration document is empty");
+      OLogManager.instance().error(this, "onAfterActivate() Configuration document is empty");
     }
   }
 
@@ -751,6 +769,35 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
     }
 
     return sectionDoc;
+  }
+
+  // Change the component section and save it to disk
+  private void setSection(final String section, ODocument sectionDoc) {
+
+    ODocument oldSection = getSection(section);
+    try {
+      if (configDoc != null) {
+
+        configDoc.field(section, sectionDoc);
+        String configFile = OSystemVariableResolver.resolveSystemVariables("${ORIENTDB_HOME}/config/security.json");
+
+        // The default "security.json" file can be overridden in the server config file.
+        String securityFile = getConfigProperty("server.security.file");
+        if (securityFile != null)
+          configFile = securityFile;
+
+        String ssf = OGlobalConfiguration.SERVER_SECURITY_FILE.getValueAsString();
+        if (ssf != null)
+          configFile = ssf;
+
+        File f = new File(configFile);
+        OIOUtils.writeFile(f, configDoc.toJSON("prettyPrint"));
+      }
+    } catch (Exception ex) {
+      configDoc.field(section, oldSection);
+      OLogManager.instance().error(this, "ODefaultServerSecurity.setSection(%s) Exception: %s", section, ex.getMessage());
+    }
+
   }
 
   // "${ORIENTDB_HOME}/config/security.json"
@@ -952,6 +999,7 @@ public class ODefaultServerSecurity implements OSecurityFactory, OServerLifecycl
             OLogManager.instance().error(this, "ODefaultServerSecurity.reloadAuditingService() Auditing class property is missing");
           }
         }
+
       }
     } catch (Exception ex) {
       OLogManager.instance().error(this, "ODefaultServerSecurity.reloadAuditingService() Exception: %s", ex.getMessage());
