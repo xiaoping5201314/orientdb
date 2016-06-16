@@ -23,7 +23,8 @@ public class OCuckooFilterTest {
   }
 
   public void addItemsTillItPossible() {
-    OCuckooFilter filter = new OCuckooFilter(25);
+    int capacity = 1 << 20;
+    OCuckooFilter filter = new OCuckooFilter(capacity);
 
     final long seed = System.currentTimeMillis();
     System.out.println("addItemsTillItPossible seed : " + seed);
@@ -32,25 +33,24 @@ public class OCuckooFilterTest {
     final Set<byte[]> addedKeys = new HashSet<>();
 
     byte[] key;
-    do {
-      for (final byte[] akey : addedKeys) {
-         Assert.assertTrue(filter.contains(akey));
-      }
-
+    while (true) {
       key = new byte[20];
       random.nextBytes(key);
-      addedKeys.add(key);
-    } while (filter.add(key));
+      if (addedKeys.add(key)) {
+        if (!filter.add(key))
+          break;
+      }
+    }
 
     addedKeys.remove(key);
 
-    System.out.println("size " + addedKeys.size());
+    System.out.println("size " + addedKeys.size() + " load " + (addedKeys.size() / (float) capacity));
 
     for (final byte[] akey : addedKeys) {
       Assert.assertTrue(filter.contains(akey));
     }
 
-    for (int i = 0; i < addedKeys.size() * 1000; ) {
+    for (int i = 0; i < addedKeys.size() * 100; ) {
       byte[] akey = new byte[20];
       random.nextBytes(akey);
 

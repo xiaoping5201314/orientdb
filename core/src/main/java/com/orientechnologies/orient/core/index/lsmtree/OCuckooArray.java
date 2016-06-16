@@ -12,6 +12,7 @@ public class OCuckooArray {
   private static final int ITEM_SIZE_IN_BYTES = 2;
   private static final int ITEM_SIZE_IN_BITS  = 16;
   private static final int ITEMS_PER_BUCKET   = 4;
+  private static final int FILL_BIT_MASK      = 0xF;
 
   private static final int ITEMS_PER_FILLED_PAGE = PAGE_SIZE * 8;
 
@@ -35,7 +36,7 @@ public class OCuckooArray {
    */
   private long[] data;
 
-  public OCuckooArray(int capacity) {
+  OCuckooArray(int capacity) {
     if (capacity < MINIMUM_CAPACITY)
       capacity = MINIMUM_CAPACITY;
 
@@ -45,7 +46,7 @@ public class OCuckooArray {
     filledTo = new long[(capacity + ITEMS_PER_FILLED_PAGE - 1) / ITEMS_PER_FILLED_PAGE];
   }
 
-  public void clear() {
+  void clear() {
     for (int i = 0; i < filledTo.length; i++) {
       filledTo[i] = 0;
     }
@@ -58,12 +59,12 @@ public class OCuckooArray {
    * @param fingerprint Fingerprint to add
    * @return <code>true</code> if bucket was not full and fingerprint was successfully added.
    */
-  public boolean add(int index, int fingerprint) {
+  boolean add(int index, int fingerprint) {
     final int firstItemIndex = index * ITEMS_PER_BUCKET;
     final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
 
     long fillItem = filledTo[fillIndex];
-    long fillBitMask = 1 << (firstItemIndex - firstItemIndex * ITEMS_PER_FILLED_PAGE);
+    long fillBitMask = 1L << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
 
     int freeIndex = -1;
     for (int i = 0; i < ITEMS_PER_BUCKET; i++) {
@@ -92,12 +93,12 @@ public class OCuckooArray {
     return true;
   }
 
-  public boolean contains(int index, int fingerprint) {
+  boolean contains(int index, int fingerprint) {
     final int firstItemIndex = index * ITEMS_PER_BUCKET;
     final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
 
     final long fillItem = filledTo[fillIndex];
-    long fillBitMask = 1 << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
+    long fillBitMask = 1L << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
 
     final int dataIndex = firstItemIndex / ITEMS_PER_DATA_PAGE;
     final long item = data[dataIndex];
@@ -118,12 +119,23 @@ public class OCuckooArray {
     return false;
   }
 
+  public int getBucketSize(int index) {
+    final int firstItemIndex = index * ITEMS_PER_BUCKET;
+    final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
+
+    final long fillItem = filledTo[fillIndex];
+    final int itemOffset = firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE;
+
+    int fillBucketMask = (int) (FILL_BIT_MASK & (fillItem >> itemOffset));
+    return Integer.bitCount(fillBucketMask);
+  }
+
   public int get(int index) {
     final int firstItemIndex = index * ITEMS_PER_BUCKET;
     final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
 
     final long fillItem = filledTo[fillIndex];
-    long fillBitMask = 1 << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
+    long fillBitMask = 1L << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
 
     final int dataIndex = firstItemIndex / ITEMS_PER_DATA_PAGE;
     final long item = data[dataIndex];
@@ -142,12 +154,40 @@ public class OCuckooArray {
     return -1;
   }
 
+  public int get(int index, int itemIndex) {
+    final int firstItemIndex = index * ITEMS_PER_BUCKET;
+    final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
+
+    final long fillItem = filledTo[fillIndex];
+    long fillBitMask = 1L << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
+
+    final int dataIndex = firstItemIndex / ITEMS_PER_DATA_PAGE;
+    final long item = data[dataIndex];
+
+    int ii = 0;
+    for (int i = 0; i < ITEMS_PER_BUCKET; i++) {
+      if ((fillItem & fillBitMask) != 0) {
+        if (ii == itemIndex) {
+          final int dataOffset = ITEM_SIZE_IN_BITS * (firstItemIndex + i - dataIndex * ITEMS_PER_DATA_PAGE);
+          final long dataMask = FINGER_PRINT_MASK << dataOffset;
+
+          return (int) ((item & dataMask) >> dataOffset);
+        }
+      }
+
+      ii++;
+      fillBitMask = fillBitMask << 1;
+    }
+
+    return -1;
+  }
+
   public boolean remove(int index, int fingerprint) {
     final int firstItemIndex = index * ITEMS_PER_BUCKET;
     final int fillIndex = firstItemIndex / ITEMS_PER_FILLED_PAGE;
 
     long fillItem = filledTo[fillIndex];
-    long fillBitMask = 1 << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
+    long fillBitMask = 1L << (firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE);
 
     final int dataIndex = firstItemIndex / ITEMS_PER_DATA_PAGE;
     final long item = data[dataIndex];
@@ -172,8 +212,44 @@ public class OCuckooArray {
     return false;
   }
 
-  public int index(int hash) {
-    return (hash & 0x7FFFFFFF) & ((data.length << 5) - 1);
+  int bucketIndex(int hash) {
+    return (hash & 0x7FFFFFFF) % ((data.length * (PAGE_SIZE / ITEM_SIZE_IN_BYTES) / ITEMS_PER_BUCKET));
+  }
+
+  String printDebug() {
+    int counter = 0;
+    StringBuilder builder = new StringBuilder();
+
+    for (long fillItem : filledTo) {
+      int i = 0;
+      while (i < PAGE_SIZE * 8) {
+        final int bucketIndex = counter / ITEMS_PER_BUCKET;
+        StringBuilder bucket = new StringBuilder();
+        boolean notEmpty = false;
+
+        bucket.append("{");
+        for (int n = 0; n < ITEMS_PER_BUCKET; n++) {
+          long fillMask = (1L << i);
+          if ((fillItem & fillMask) != 0) {
+            final int itemIndex = counter / ITEMS_PER_DATA_PAGE;
+            final long dataOffset = ITEM_SIZE_IN_BITS * (counter - itemIndex * ITEMS_PER_DATA_PAGE);
+            bucket.append("[").append(n).append(":").append((data[itemIndex] & (FINGER_PRINT_MASK << dataOffset)) >> dataOffset).
+                append("]");
+            notEmpty = true;
+          }
+
+          counter++;
+          i++;
+
+        }
+        bucket.append("}");
+
+        if (notEmpty)
+          builder.append("B : ").append(bucketIndex).append(" - ").append(bucket).append(" ");
+      }
+    }
+
+    return builder.toString();
   }
 
   /**

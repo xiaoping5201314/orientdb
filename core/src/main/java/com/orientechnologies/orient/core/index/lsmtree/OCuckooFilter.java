@@ -6,11 +6,10 @@ import java.util.Random;
 
 public class OCuckooFilter {
   private static final int[] RANDOM_NUMBERS;
-  private static final int   SEED                 = 362498820;
-  private static final float EXPECTED_LOAD_FACTOR = 0.9f;
+  private static final int SEED = 362498820;
 
   static {
-    int[] rnds = new int[16];
+    int[] rnds = new int[256];
     Random rnd = new Random(SEED);
 
     for (int i = 0; i < rnds.length; i++) {
@@ -26,7 +25,7 @@ public class OCuckooFilter {
   private int size;
 
   public OCuckooFilter(int capacity) {
-    final int arrayCapacity = (int) Math.ceil((capacity << 1) / EXPECTED_LOAD_FACTOR);
+    final int arrayCapacity = capacity >>> 1;
 
     firstArray = new OCuckooArray(arrayCapacity);
     secondArray = new OCuckooArray(arrayCapacity);
@@ -55,13 +54,10 @@ public class OCuckooFilter {
     final int firstIndex = result[1];
     final int secondIndex = result[2];
 
-    int f = firstArray.get(firstIndex);
-    if (f == fingerprint)
+    if (firstArray.contains(firstIndex, fingerprint))
       return true;
 
-    f = secondArray.get(secondIndex);
-
-    return f == fingerprint;
+    return secondArray.contains(secondIndex, fingerprint);
   }
 
   private int[] fingerprintFirstSecondIndex(byte[] key) {
@@ -69,9 +65,9 @@ public class OCuckooFilter {
 
     final int[] result = new int[3];
 
-    result[0] = (int) (h & 0x0F);
-    result[1] = firstArray.index((int) ((h >>> 4) & 0x7FFFFFFF));
-    result[2] = result[1] ^ secondArray.index(jswHashing(result[0]));
+    result[0] = (int) (h & 0xFFFF);
+    result[1] = firstArray.bucketIndex((int) ((h >>> 16) & 0x7FFFFFFF));
+    result[2] = result[1] ^ secondArray.bucketIndex(jswHashing(result[0]));
 
     return result;
   }
@@ -85,17 +81,27 @@ public class OCuckooFilter {
     }
 
     if (!inserted) {
-      final int existingFingerprint = firstArray.get(firstIndex);
+      int existingFingerprint = firstArray.get(firstIndex);
 
-      final int nextIndex = secondArray.index(jswHashing(existingFingerprint)) ^ firstIndex;
+      int nextIndex = secondArray.bucketIndex(jswHashing(existingFingerprint)) ^ firstIndex;
 
-      final boolean result = move(existingFingerprint, nextIndex, false, 0);
+      boolean result = move(existingFingerprint, nextIndex, false, 0);
       if (result) {
         firstArray.remove(firstIndex, existingFingerprint);
         return set(firstIndex, secondIndex, fingerprint);
       } else {
-        return false;
+        existingFingerprint = secondArray.get(secondIndex);
+
+        nextIndex = firstArray.bucketIndex(jswHashing(existingFingerprint)) ^ secondIndex;
+
+        result = move(existingFingerprint, nextIndex, true, 0);
+        if (result) {
+          secondArray.remove(secondIndex, existingFingerprint);
+          return set(firstIndex, secondIndex, fingerprint);
+        }
       }
+
+      return false;
     } else {
 
       return true;
@@ -112,7 +118,7 @@ public class OCuckooFilter {
         return true;
 
       final int nextFingerprint = firstArray.get(index);
-      final int nextIndex = secondArray.index(jswHashing(nextFingerprint)) ^ index;
+      final int nextIndex = secondArray.bucketIndex(jswHashing(nextFingerprint)) ^ index;
 
       result = move(nextFingerprint, nextIndex, false, counter + 1);
       if (result) {
@@ -126,7 +132,7 @@ public class OCuckooFilter {
         return true;
 
       final int nextFingerprint = secondArray.get(index);
-      final int nextIndex = firstArray.index(jswHashing(nextFingerprint)) ^ index;
+      final int nextIndex = firstArray.bucketIndex(jswHashing(nextFingerprint)) ^ index;
 
       result = move(nextFingerprint, nextIndex, true, counter + 1);
       if (result) {
@@ -160,10 +166,26 @@ public class OCuckooFilter {
     secondArray.clear();
   }
 
-  private int jswHashing(int fingerPrint) {
-    final int h = 16777551;
+  public int size() {
+    return size;
+  }
 
-    return ((h << 1) | (h >>> 31)) ^ RANDOM_NUMBERS[fingerPrint];
+  public String printDebug() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("List 1 ").append(firstArray.printDebug()).append("\n");
+    builder.append("List 2 ").append(secondArray.printDebug());
+
+    return builder.toString();
+  }
+
+  private int jswHashing(int fingerPrint) {
+    int h = 16777551;
+
+    for (int i = 0; i < 2; i++) {
+      h = (h << 1 | h >> 31) ^ RANDOM_NUMBERS[0xFF & (fingerPrint >> i)];
+    }
+
+    return h;
   }
 
 }
