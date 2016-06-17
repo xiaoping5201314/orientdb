@@ -22,8 +22,6 @@ public class OCuckooFilter {
   private OCuckooArray firstArray;
   private OCuckooArray secondArray;
 
-  private int size;
-
   public OCuckooFilter(int capacity) {
     final int arrayCapacity = capacity >>> 1;
 
@@ -39,8 +37,6 @@ public class OCuckooFilter {
     final int secondIndex = result[2];
 
     if (set(firstIndex, secondIndex, fingerprint)) {
-      size++;
-
       return true;
     } else {
       return false;
@@ -156,22 +152,15 @@ public class OCuckooFilter {
     final int secondIndex = result[2];
 
     if (firstArray.remove(firstIndex, fingerprint)) {
-      size--;
       return;
     }
 
-    if (secondArray.remove(secondIndex, fingerprint)) {
-      size--;
-    }
+    secondArray.remove(secondIndex, fingerprint);
   }
 
   public void clear() {
     firstArray.clear();
     secondArray.clear();
-  }
-
-  public int size() {
-    return size;
   }
 
   public String printDebug() {

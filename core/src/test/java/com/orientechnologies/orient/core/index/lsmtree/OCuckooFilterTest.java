@@ -3,9 +3,7 @@ package com.orientechnologies.orient.core.index.lsmtree;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 
 @Test
 public class OCuckooFilterTest {
@@ -24,8 +22,6 @@ public class OCuckooFilterTest {
 
   public void addItemsTillItPossible() {
     int capacity = 1 << 10;
-
-    System.out.println("addItemsTillItPossible capacity :" + capacity);
     OCuckooFilter filter = new OCuckooFilter(capacity);
 
     final long seed = System.currentTimeMillis();
@@ -34,18 +30,12 @@ public class OCuckooFilterTest {
     final Random random = new Random(seed);
     final Set<byte[]> addedKeys = new HashSet<>();
 
-    byte[] key;
-    while (true) {
-      key = new byte[20];
-      random.nextBytes(key);
-      if (addedKeys.add(key)) {
-        if (!filter.add(key))
-          break;
-      }
-    }
+    addKeys(filter, random, addedKeys);
 
-    addedKeys.remove(key);
+    checkFilterConsistency(filter, random, addedKeys);
+  }
 
+  private void checkFilterConsistency(OCuckooFilter filter, Random random, Set<byte[]> addedKeys) {
     for (final byte[] akey : addedKeys) {
       Assert.assertTrue(filter.contains(akey));
     }
@@ -60,5 +50,49 @@ public class OCuckooFilterTest {
       }
 
     }
+  }
+
+  public void addItemsThenRemoveThemAndAddAgain() {
+    int capacity = 1 << 10;
+    OCuckooFilter filter = new OCuckooFilter(capacity);
+
+    final long seed = System.currentTimeMillis();
+    System.out.println("addItemsThenRemoveThemAndAddAgain seed : " + seed);
+
+    final Random random = new Random(seed);
+    final Set<byte[]> addedKeys = new HashSet<>();
+
+    addKeys(filter, random, addedKeys);
+
+    List<byte[]> toRemove = new ArrayList<>();
+    for (byte[] k : addedKeys) {
+      if (random.nextBoolean())
+        toRemove.add(k);
+    }
+
+    for (byte[] d : toRemove) {
+      addedKeys.remove(d);
+      filter.remove(d);
+    }
+
+    checkFilterConsistency(filter, random, addedKeys);
+
+    addKeys(filter, random, addedKeys);
+
+    checkFilterConsistency(filter, random, addedKeys);
+  }
+
+  private void addKeys(OCuckooFilter filter, Random random, Set<byte[]> addedKeys) {
+    byte[] key;
+    while (true) {
+      key = new byte[20];
+      random.nextBytes(key);
+      if (addedKeys.add(key)) {
+        if (!filter.add(key))
+          break;
+      }
+    }
+
+    addedKeys.remove(key);
   }
 }
