@@ -126,7 +126,7 @@ public class OCuckooArray {
     final long fillItem = filledTo[fillIndex];
     final int itemOffset = firstItemIndex - fillIndex * ITEMS_PER_FILLED_PAGE;
 
-    int fillBucketMask = (int) (FILL_BIT_MASK & (fillItem >> itemOffset));
+    int fillBucketMask = (int) (FILL_BIT_MASK & (fillItem >>> itemOffset));
     return Integer.bitCount(fillBucketMask);
   }
 
@@ -145,7 +145,7 @@ public class OCuckooArray {
         final int dataOffset = ITEM_SIZE_IN_BITS * (firstItemIndex + i - dataIndex * ITEMS_PER_DATA_PAGE);
         final long dataMask = FINGER_PRINT_MASK << dataOffset;
 
-        return (int) ((item & dataMask) >> dataOffset);
+        return (int) ((item & dataMask) >>> dataOffset);
       }
 
       fillBitMask = fillBitMask << 1;
@@ -171,7 +171,7 @@ public class OCuckooArray {
           final int dataOffset = ITEM_SIZE_IN_BITS * (firstItemIndex + i - dataIndex * ITEMS_PER_DATA_PAGE);
           final long dataMask = FINGER_PRINT_MASK << dataOffset;
 
-          return (int) ((item & dataMask) >> dataOffset);
+          return (int) ((item & dataMask) >>> dataOffset);
         }
       }
 
@@ -233,7 +233,7 @@ public class OCuckooArray {
           if ((fillItem & fillMask) != 0) {
             final int itemIndex = counter / ITEMS_PER_DATA_PAGE;
             final long dataOffset = ITEM_SIZE_IN_BITS * (counter - itemIndex * ITEMS_PER_DATA_PAGE);
-            bucket.append("[").append(n).append(":").append((data[itemIndex] & (FINGER_PRINT_MASK << dataOffset)) >> dataOffset).
+            bucket.append("[").append(n).append(":").append((data[itemIndex] & (FINGER_PRINT_MASK << dataOffset)) >>> dataOffset).
                 append("]");
             notEmpty = true;
           }

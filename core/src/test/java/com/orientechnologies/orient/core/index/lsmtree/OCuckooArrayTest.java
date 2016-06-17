@@ -3,6 +3,9 @@ package com.orientechnologies.orient.core.index.lsmtree;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import java.util.function.IntSupplier;
+import java.util.function.UnaryOperator;
+
 @Test
 public class OCuckooArrayTest {
 
@@ -47,8 +50,21 @@ public class OCuckooArrayTest {
     Assert.assertEquals(cuckooArray.get(1), -1);
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
       Assert.assertEquals(cuckooArray.getBucketSize(1), i);
+      assertBucketContent(cuckooArray, 1, populateContent((n) -> {
+        if (n < k)
+          return 5 + n;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.add(1, 5 + i));
+
+      assertBucketContent(cuckooArray, 1, populateContent((n) -> {
+        if (n <= k)
+          return 5 + n;
+        return -1;
+      }));
       Assert.assertEquals(cuckooArray.getBucketSize(1), i + 1);
     }
 
@@ -67,8 +83,24 @@ public class OCuckooArrayTest {
     }
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
+
       Assert.assertEquals(cuckooArray.getBucketSize(1), 4 - i);
+
+      assertBucketContent(cuckooArray, 1, populateContent((n) -> {
+        if (n >= k)
+          return 5 + n;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.remove(1, 5 + i));
+
+      assertBucketContent(cuckooArray, 1, populateContent((n) -> {
+        if (n > k)
+          return 5 + n;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(1), 3 - i);
 
       if (i < 3) {
@@ -96,22 +128,45 @@ public class OCuckooArrayTest {
     Assert.assertEquals(cuckooArray.get(63), -1);
     Assert.assertEquals(cuckooArray.get(64), -1);
 
-    int[] bucketContent;
-
     for (int i = 0; i < 4; i++) {
+      final int k = i;
       Assert.assertEquals(cuckooArray.getBucketSize(63), i);
 
-      assertBucketContent(cuckooArray, 63, fillContentBeforeInsert(i));
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n < k)
+          return 5 + n;
+        return -1;
+      }));
 
       Assert.assertTrue(cuckooArray.add(63, 5 + i));
 
-      assertBucketContent(cuckooArray, 63, fillContentAfterInsert(i));
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n <= k)
+          return 5 + n;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(63), i + 1);
     }
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
       Assert.assertEquals(cuckooArray.getBucketSize(64), i);
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n < k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.add(64, i + 1));
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n <= k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(64), i + 1);
     }
 
@@ -134,8 +189,24 @@ public class OCuckooArrayTest {
     }
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
+
       Assert.assertEquals(cuckooArray.getBucketSize(63), 4 - i);
+
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n >= k)
+          return n + 5;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.remove(63, i + 5));
+
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n > k)
+          return n + 5;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(63), 3 - i);
 
       if (i < 3) {
@@ -146,8 +217,24 @@ public class OCuckooArrayTest {
     Assert.assertEquals(cuckooArray.get(63), -1);
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
+
       Assert.assertEquals(cuckooArray.getBucketSize(64), 4 - i);
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n >= k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.remove(64, i + 1));
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n > k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(64), 3 - i);
 
       if (i < 3) {
@@ -165,14 +252,46 @@ public class OCuckooArrayTest {
     }
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
+
       Assert.assertEquals(cuckooArray.getBucketSize(63), i);
+
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n < k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.add(63, i + 1));
+
+      assertBucketContent(cuckooArray, 63, populateContent((n) -> {
+        if (n <= k)
+          return n + 1;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(63), i + 1);
     }
 
     for (int i = 0; i < 4; i++) {
+      final int k = i;
+
       Assert.assertEquals(cuckooArray.getBucketSize(64), i);
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n < k)
+          return n + 5;
+        return -1;
+      }));
+
       Assert.assertTrue(cuckooArray.add(64, i + 5));
+
+      assertBucketContent(cuckooArray, 64, populateContent((n) -> {
+        if (n <= k)
+          return n + 5;
+        return -1;
+      }));
+
       Assert.assertEquals(cuckooArray.getBucketSize(64), i + 1);
     }
 
@@ -184,35 +303,18 @@ public class OCuckooArrayTest {
     }
   }
 
-  private int[] fillContentAfterInsert(int i) {
-    int[] bucketContent = new int[4];
-
-    for (int n = 0; n <= i; n++) {
-      bucketContent[n] = 5 + n;
-    }
-    for (int n = i + 1; n < 4; n++) {
-      bucketContent[n] = -1;
-    }
-
-    return bucketContent;
-  }
-
-  private int[] fillContentBeforeInsert(int i) {
-    int[] bucketContent = new int[4];
-
-    for (int n = 0; n < i; n++) {
-      bucketContent[n] = 5 + n;
-    }
-    for (int n = i; n < 4; n++) {
-      bucketContent[n] = -1;
-    }
-
-    return bucketContent;
-  }
-
   private void assertBucketContent(OCuckooArray array, int bucket, int[] content) {
     for (int i = 0; i < content.length; i++) {
       Assert.assertEquals(array.get(bucket, i), content[i]);
     }
+  }
+
+  private int[] populateContent(UnaryOperator<Integer> supplyer) {
+    int[] content = new int[4];
+    for (int i = 0; i < 4; i++) {
+      content[i] = supplyer.apply(i);
+    }
+
+    return content;
   }
 }

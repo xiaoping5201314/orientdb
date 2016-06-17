@@ -23,7 +23,9 @@ public class OCuckooFilterTest {
   }
 
   public void addItemsTillItPossible() {
-    int capacity = 1 << 20;
+    int capacity = 1 << 10;
+
+    System.out.println("addItemsTillItPossible capacity :" + capacity);
     OCuckooFilter filter = new OCuckooFilter(capacity);
 
     final long seed = System.currentTimeMillis();
@@ -43,8 +45,6 @@ public class OCuckooFilterTest {
     }
 
     addedKeys.remove(key);
-
-    System.out.println("size " + addedKeys.size() + " load " + (addedKeys.size() / (float) capacity));
 
     for (final byte[] akey : addedKeys) {
       Assert.assertTrue(filter.contains(akey));

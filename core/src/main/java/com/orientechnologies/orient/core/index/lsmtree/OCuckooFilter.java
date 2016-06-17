@@ -81,26 +81,30 @@ public class OCuckooFilter {
     }
 
     if (!inserted) {
-      int existingFingerprint = firstArray.get(firstIndex);
-
-      int nextIndex = secondArray.bucketIndex(jswHashing(existingFingerprint)) ^ firstIndex;
-
-      boolean result = move(existingFingerprint, nextIndex, false, 0);
+      boolean result = false;
+      int existingFingerprint = -1;
+      for (int bucketSize = firstArray.getBucketSize(firstIndex), n = 0; n < bucketSize && !result; n++) {
+        existingFingerprint = firstArray.get(firstIndex, n);
+        int nextIndex = secondArray.bucketIndex(jswHashing(existingFingerprint)) ^ firstIndex;
+        result = move(existingFingerprint, nextIndex, false, 0);
+      }
       if (result) {
         firstArray.remove(firstIndex, existingFingerprint);
         return set(firstIndex, secondIndex, fingerprint);
       } else {
-        existingFingerprint = secondArray.get(secondIndex);
+        result = false;
 
-        nextIndex = firstArray.bucketIndex(jswHashing(existingFingerprint)) ^ secondIndex;
+        for (int bucketSize = secondArray.get(secondIndex), n = 0; n < bucketSize && !result; n++) {
+          existingFingerprint = secondArray.get(secondIndex);
+          int nextIndex = secondArray.bucketIndex(jswHashing(existingFingerprint)) ^ secondIndex;
+          result = move(existingFingerprint, nextIndex, true, 0);
+        }
 
-        result = move(existingFingerprint, nextIndex, true, 0);
         if (result) {
           secondArray.remove(secondIndex, existingFingerprint);
           return set(firstIndex, secondIndex, fingerprint);
         }
       }
-
       return false;
     } else {
 
