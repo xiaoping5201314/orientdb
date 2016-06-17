@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.core.index.lsmtree;
+package com.orientechnologies.orient.core.index.lsmtree.cuckoofilter;
 
 import com.orientechnologies.common.hash.OMurmurHash3;
 

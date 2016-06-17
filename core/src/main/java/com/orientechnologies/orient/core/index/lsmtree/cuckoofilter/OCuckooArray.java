@@ -1,25 +1,50 @@
-package com.orientechnologies.orient.core.index.lsmtree;
+package com.orientechnologies.orient.core.index.lsmtree.cuckoofilter;
+
+import com.orientechnologies.common.exception.OException;
+import com.orientechnologies.orient.core.exception.OCuckooArrayException;
+import com.orientechnologies.orient.core.storage.cache.OCacheEntry;
+import com.orientechnologies.orient.core.storage.impl.local.OAbstractPaginatedStorage;
+import com.orientechnologies.orient.core.storage.impl.local.paginated.atomicoperations.OAtomicOperation;
+import com.orientechnologies.orient.core.storage.impl.local.paginated.base.ODurableComponent;
+import com.orientechnologies.orient.core.storage.impl.local.paginated.base.ODurablePage;
+
+import java.io.IOException;
+
+import static com.orientechnologies.orient.core.config.OGlobalConfiguration.DISK_CACHE_PAGE_SIZE;
 
 /**
  * Array which will contain element of {@link OCuckooFilter}.
  * <p>
  * Each array bucket consist of 4 items. Each bucket has unique index but item itself does not have index.
- * Each item size is 16 bits of 2 bytes.
+ * Each item size is 16 bits or 2 bytes.
  */
-public class OCuckooArray {
-  private static final int PAGE_SIZE = 8;
+public class OCuckooArray extends ODurableComponent {
+  public static final String DEF_EXTENSION    = ".dca";
+  public static final String FILLED_EXTENSION = ".fca";
+  public static final String STATE_EXTENSION  = ".sca";
+
+  private static final int DISK_PAGE_SIZE   = DISK_CACHE_PAGE_SIZE.getValueAsInteger() * 1024;
+  private static final int USEFUL_PAGE_SIZE = closestPowerOfTwo((DISK_PAGE_SIZE - ODurablePage.NEXT_FREE_POSITION + 1) / 2);
 
   private static final int ITEM_SIZE_IN_BYTES = 2;
   private static final int ITEM_SIZE_IN_BITS  = 16;
   private static final int ITEMS_PER_BUCKET   = 4;
   private static final int FILL_BIT_MASK      = 0xF;
 
-  private static final int ITEMS_PER_FILLED_PAGE = PAGE_SIZE * 8;
+  private static int DATA_PAGE_SIZE =
+      ((USEFUL_PAGE_SIZE + ITEM_SIZE_IN_BYTES * ITEMS_PER_BUCKET - 1) / (ITEM_SIZE_IN_BYTES * ITEMS_PER_BUCKET))
+          * ITEM_SIZE_IN_BYTES * ITEMS_PER_BUCKET;
 
-  private static final int ITEMS_PER_DATA_PAGE = PAGE_SIZE / ITEM_SIZE_IN_BYTES;
+  private static int FILLED_PAGE_SIZE = USEFUL_PAGE_SIZE;
+
+  private static final int ITEMS_PER_FILLED_PAGE = FILLED_PAGE_SIZE * 8;
+
+  private static final int ITEMS_PER_DATA_PAGE = DATA_PAGE_SIZE / ITEM_SIZE_IN_BYTES;
 
   private static final int  MINIMUM_CAPACITY  = Math.max(ITEMS_PER_FILLED_PAGE, ITEMS_PER_DATA_PAGE);
   private static final long FINGER_PRINT_MASK = 0xFFFF;
+
+  private int capacity;
 
   /**
    * List of bits each bit shows weather related item inside of bucket is filled or not.
@@ -36,14 +61,100 @@ public class OCuckooArray {
    */
   private long[] data;
 
-  OCuckooArray(int capacity) {
+  private long filledFileId;
+  private long dataFileId;
+
+  OCuckooArray(final String name, final String lockName, final OAbstractPaginatedStorage storage) {
+    super(storage, name, DEF_EXTENSION, lockName);
+  }
+
+  public void open() throws IOException {
+    startOperation();
+    try {
+      acquireExclusiveLock();
+      try {
+        final OAtomicOperation atomicOperation = atomicOperationsManager.getCurrentOperation();
+        filledFileId = openFile(atomicOperation, getName() + FILLED_EXTENSION);
+        dataFileId = openFile(atomicOperation, getName() + DEF_EXTENSION);
+
+        pinFilePages(atomicOperation, filledFileId);
+        pinFilePages(atomicOperation, dataFileId);
+
+        final long stateFileId = openFile(atomicOperation, getName() + STATE_EXTENSION);
+        OCacheEntry cacheEntry = loadPage(atomicOperation, stateFileId, 0, false);
+        try {
+          cacheEntry.acquireSharedLock();
+          try {
+            final OStatePage statePage = new OStatePage(cacheEntry, getChanges(atomicOperation, cacheEntry));
+            this.capacity = statePage.getCapacity();
+          } finally {
+            cacheEntry.releaseSharedLock();
+          }
+        } finally {
+          releasePage(atomicOperation, cacheEntry);
+        }
+      } finally {
+        releaseExclusiveLock();
+      }
+    } finally {
+      completeOperation();
+    }
+  }
+
+  private void pinFilePages(OAtomicOperation atomicOperation, long fileId) throws IOException {
+    final long filledSize = getFilledUpTo(atomicOperation, fileId);
+
+    for (long filledPageIndex = 0; filledPageIndex < filledSize; filledPageIndex++) {
+      OCacheEntry cacheEntry = loadPage(atomicOperation, fileId, filledPageIndex, false);
+      try {
+        pinPage(atomicOperation, cacheEntry);
+      } finally {
+        releasePage(atomicOperation, cacheEntry);
+      }
+    }
+  }
+
+  public void create(int capacity) throws IOException {
     if (capacity < MINIMUM_CAPACITY)
       capacity = MINIMUM_CAPACITY;
 
     capacity = closestPowerOfTwo(capacity);
 
-    data = new long[(capacity + ITEMS_PER_DATA_PAGE - 1) / ITEMS_PER_DATA_PAGE];
-    filledTo = new long[(capacity + ITEMS_PER_FILLED_PAGE - 1) / ITEMS_PER_FILLED_PAGE];
+    startOperation();
+    try {
+      acquireExclusiveLock();
+      final OAtomicOperation atomicOperation = startAtomicOperation(false);
+      try {
+        filledFileId = addFile(atomicOperation, getName() + FILLED_EXTENSION);
+        dataFileId = addFile(atomicOperation, getName() + DEF_EXTENSION);
+
+        final long stateFileId = addFile(atomicOperation, getName() + STATE_EXTENSION);
+        OCacheEntry cacheEntry = addPage(atomicOperation, stateFileId);
+        try {
+          cacheEntry.acquireExclusiveLock();
+          try {
+            final OStatePage statePage = new OStatePage(cacheEntry, getChanges(atomicOperation, cacheEntry));
+            statePage.setCapacity(capacity);
+          } finally {
+            cacheEntry.releaseExclusiveLock();
+          }
+        } finally {
+          releasePage(atomicOperation, cacheEntry);
+        }
+
+        this.capacity = capacity;
+
+        endAtomicOperation(false, null);
+      } catch (Exception e) {
+        endAtomicOperation(true, e);
+        throw OException.wrapException(new OCuckooArrayException("Error during component creation", this), e);
+      } finally {
+        releaseExclusiveLock();
+      }
+    } finally {
+      completeOperation();
+    }
+
   }
 
   void clear() {
@@ -213,7 +324,7 @@ public class OCuckooArray {
   }
 
   int bucketIndex(int hash) {
-    return (hash & 0x7FFFFFFF) % ((data.length * (PAGE_SIZE / ITEM_SIZE_IN_BYTES) / ITEMS_PER_BUCKET));
+    return (hash & 0x7FFFFFFF) % ((data.length * (DATA_PAGE_SIZE / ITEM_SIZE_IN_BYTES) / ITEMS_PER_BUCKET));
   }
 
   String printDebug() {
@@ -222,7 +333,7 @@ public class OCuckooArray {
 
     for (long fillItem : filledTo) {
       int i = 0;
-      while (i < PAGE_SIZE * 8) {
+      while (i < USEFUL_PAGE_SIZE * 8) {
         final int bucketIndex = counter / ITEMS_PER_BUCKET;
         StringBuilder bucket = new StringBuilder();
         boolean notEmpty = false;
@@ -259,7 +370,7 @@ public class OCuckooArray {
    * @param value Integer the most significant power of 2 should be found.
    * @return The most significant power of 2.
    */
-  private int closestPowerOfTwo(int value) {
+  private static int closestPowerOfTwo(int value) {
     int n = value - 1;
     n |= n >>> 1;
     n |= n >>> 2;

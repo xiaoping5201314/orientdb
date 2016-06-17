@@ -1,9 +1,9 @@
-package com.orientechnologies.orient.core.index.lsmtree;
+package com.orientechnologies.orient.core.index.lsmtree.cuckoofilter;
 
+import com.orientechnologies.orient.core.index.lsmtree.cuckoofilter.OCuckooArray;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import java.util.function.IntSupplier;
 import java.util.function.UnaryOperator;
 
 @Test
