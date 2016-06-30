@@ -1,15 +1,15 @@
 package com.orientechnologies.orient.core.db.document;
 
 import com.orientechnologies.orient.core.record.impl.ODocument;
-import org.testng.annotations.Test;
+import org.junit.Test;
 
-import static org.testng.Assert.assertEquals;
+import static org.junit.Assert.assertEquals;
 
-public class TestDeepLinkedDocumentSave {
+public class DeepLinkedDocumentSaveTest {
 
   @Test
   public void testLinked() {
-    ODatabaseDocument db = new ODatabaseDocumentTx("memory:" + TestDeepLinkedDocumentSave.class.getSimpleName());
+    ODatabaseDocument db = new ODatabaseDocumentTx("memory:" + DeepLinkedDocumentSaveTest.class.getSimpleName());
     db.create();
     try {
       db.getMetadata().getSchema().createClass("Test");

@@ -43,8 +43,10 @@ public interface OMetadata {
           OIdentity.CLASS_NAME.toLowerCase(), "ORIDs".toLowerCase(), OSecurity.RESTRICTED_CLASSNAME.toLowerCase(),
           "OFunction".toLowerCase(), "OTriggered".toLowerCase(), "OSchedule".toLowerCase() })));
 
+  @Deprecated
   void load();
 
+  @Deprecated
   void create() throws IOException;
 
   OSchema getSchema();
@@ -60,11 +62,13 @@ public interface OMetadata {
   /**
    * Reloads the internal objects.
    */
+  @Deprecated
   void reload();
 
   /**
    * Closes internal objects
    */
+  @Deprecated
   void close();
 
   OFunctionLibrary getFunctionLibrary();

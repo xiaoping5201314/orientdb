@@ -22,6 +22,7 @@ package com.orientechnologies.orient.core.tx;
 
 
 import com.orientechnologies.common.exception.OException;
+import com.orientechnologies.orient.core.db.ODatabaseDocumentInternal;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
 import com.orientechnologies.orient.core.db.record.ORecordElement;
@@ -88,7 +89,7 @@ public abstract class OTransactionRealAbstract extends OTransactionAbstract {
     }
   }
 
-  protected OTransactionRealAbstract(ODatabaseDocumentTx database, int id) {
+  protected OTransactionRealAbstract(ODatabaseDocumentInternal database, int id) {
     super(database);
     this.id = id;
   }
@@ -322,17 +323,6 @@ public abstract class OTransactionRealAbstract extends OTransactionAbstract {
     if (iOperation == OPERATION.CLEAR)
       indexEntry.setCleared();
     else {
-      if (iOperation == OPERATION.REMOVE && iValue != null && iValue.getIdentity().isTemporary()) {
-
-        // TEMPORARY RECORD: JUST REMOVE IT
-        for (OTransactionIndexChangesPerKey changes : indexEntry.changesPerKey.values())
-          for (int i = 0; i < changes.entries.size(); ++i)
-            if (changes.entries.get(i).value.equals(iValue)) {
-              changes.entries.remove(i);
-              break;
-            }
-      }
-
       OTransactionIndexChangesPerKey changes = indexEntry.getChangesPerKey(key);
       changes.clientTrackOnly = clientTrackOnly;
       changes.add(iValue, iOperation);

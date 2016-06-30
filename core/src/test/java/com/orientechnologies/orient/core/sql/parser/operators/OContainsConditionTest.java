@@ -19,16 +19,34 @@
  */
 package com.orientechnologies.orient.core.sql.parser.operators;
 
-import com.orientechnologies.orient.core.sql.parser.OLuceneOperator;
-import org.testng.annotations.Test;
+import com.orientechnologies.orient.core.sql.parser.OContainsCondition;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author Luigi Dell'Aquila
  */
-public class OLuceneOperatorTest {
-  @Test(enabled = false)
+public class OContainsConditionTest {
+  @Test
   public void test() {
-    OLuceneOperator op = new OLuceneOperator(-1);
-    // TODO
+    OContainsCondition op = new OContainsCondition(-1);
+
+    Assert.assertFalse(op.execute(null, null));
+    Assert.assertFalse(op.execute(null, "foo"));
+
+    List<Object> left = new ArrayList<Object>();
+    Assert.assertFalse(op.execute(left, "foo"));
+    Assert.assertFalse(op.execute(left, null));
+
+    left.add("foo");
+    left.add("bar");
+
+    Assert.assertTrue(op.execute(left, "foo"));
+    Assert.assertTrue(op.execute(left, "bar"));
+    Assert.assertFalse(op.execute(left, "fooz"));
+
   }
 }

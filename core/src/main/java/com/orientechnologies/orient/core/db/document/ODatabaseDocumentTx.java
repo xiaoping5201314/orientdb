@@ -101,16 +101,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @SuppressWarnings("unchecked")
 public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> implements ODatabaseDocumentInternal {
 
-  @Deprecated
-  private static final String DEF_RECORD_FORMAT = "csv";
   protected static ORecordSerializer defaultSerializer;
 
   static {
-    defaultSerializer = ORecordSerializerFactory.instance()
-        .getFormat(OGlobalConfiguration.DB_DOCUMENT_SERIALIZER.getValueAsString());
-    if (defaultSerializer == null)
-      throw new ODatabaseException(
-          "Impossible to find serializer with name " + OGlobalConfiguration.DB_DOCUMENT_SERIALIZER.getValueAsString());
+    defaultSerializer = ORecordSerializerFactory.instance().getDefaultRecordSerializer();
   }
 
   private final Map<String, Object> properties = new HashMap<String, Object>();
@@ -125,8 +119,6 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
   private   OMetadataDefault     metadata;
   private   OImmutableUser       user;
   private   byte                 recordType;
-  @Deprecated
-  private   String               recordFormat;
   private final Map<ORecordHook, ORecordHook.HOOK_POSITION> hooks         = new LinkedHashMap<ORecordHook, ORecordHook.HOOK_POSITION>();
   private       boolean                                     retainRecords = true;
   private OLocalRecordCache                localCache;
@@ -140,6 +132,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
   protected ODatabaseSessionMetadata sessionMetadata;
 
   private final ORecordHook[][] hooksByScope = new ORecordHook[ORecordHook.SCOPE.values().length][];
+  private OSharedContext sharedContext;
 
   /**
    * Creates a new connection to the database.
@@ -374,11 +367,22 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
     final OStorage storage = getStorage();
     storage.restoreFromIncrementalBackup(incrementalBackupPath);
-
-    metadata = new OMetadataDefault(this);
-    metadata.load();
+    loadMetadata();
 
     return (DB) this;
+  }
+
+  private void loadMetadata() {
+    metadata = new OMetadataDefault(this);
+    OSharedContext shared = getStorage().getResource(OSharedContext.class.getName(), new Callable<OSharedContext>() {
+      @Override
+      public OSharedContext call() throws Exception {
+        OSharedContext shared = new OSharedContext(getStorage());
+        return shared;
+      }
+    });
+    metadata.init(shared);
+    shared.load(getStorage());
   }
 
   @Override
@@ -421,9 +425,17 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       if (!(getStorage() instanceof OStorageProxy))
         installHooksEmbedded();
 
-      // CREATE THE DEFAULT SCHEMA WITH DEFAULT USER
       metadata = new OMetadataDefault(this);
-      metadata.create();
+      // CREATE THE DEFAULT SCHEMA WITH DEFAULT USER
+      OSharedContext shared = getStorage().getResource(OSharedContext.class.getName(), new Callable<OSharedContext>() {
+        @Override
+        public OSharedContext call() throws Exception {
+          OSharedContext shared = new OSharedContext(getStorage());
+          return shared;
+        }
+      });
+      metadata.init(shared);
+      shared.create();
 
       if (!(getStorage() instanceof OStorageProxy))
         registerHook(new OCommandCacheHook(this), ORecordHook.HOOK_POSITION.REGULAR);
@@ -479,7 +491,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
       storage.delete();
       storage = null;
-
+      sharedContext = null;
       status = STATUS.CLOSED;
       ODatabaseRecordThreadLocal.INSTANCE.remove();
       clearOwner();
@@ -509,7 +521,6 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     db.serializer = this.serializer;
 
     db.componentsFactory = this.componentsFactory;
-    db.metadata = new OMetadataDefault(db);
 
     db.initialized = true;
     if (storage instanceof OStorageProxy) {
@@ -520,7 +531,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     }
 
     db.setStatus(STATUS.OPEN);
-    db.metadata.load();
+    db.loadMetadata();
 
     if (!(db.getStorage() instanceof OStorageProxy))
       db.installHooksEmbedded();
@@ -1202,7 +1213,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       currentIntent.end(this);
       currentIntent = null;
     }
-
+    sharedContext = null;
     status = STATUS.CLOSED;
 
     localCache.clear();
@@ -2866,8 +2877,10 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
     getStorage().restore(in, options, callable, iListener);
 
-    if (!isClosed())
-      getMetadata().reload();
+    if (!isClosed()) {
+      loadMetadata();
+      sharedContext = null;
+    }
   }
 
   /**
@@ -3014,10 +3027,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
     user = null;
 
-    metadata = new OMetadataDefault(this);
-    metadata.load();
-
-    recordFormat = DEF_RECORD_FORMAT;
+    loadMetadata();
 
     if (!(getStorage() instanceof OStorageProxy)) {
       if (metadata.getIndexManager().autoRecreateIndexesAfterCrash()) {
@@ -3182,36 +3192,6 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     }
   }
 
-  /**
-   * @Internal
-   */
-  public interface RecordReader {
-    ORawBuffer readRecord(OStorage storage, ORecordId rid, String fetchPlan, boolean ignoreCache, final int recordVersion)
-        throws ORecordNotFoundException;
-  }
-
-  /**
-   * @Internal
-   */
-  public static final class SimpleRecordReader implements RecordReader {
-    @Override
-    public ORawBuffer readRecord(OStorage storage, ORecordId rid, String fetchPlan, boolean ignoreCache, final int recordVersion)
-        throws ORecordNotFoundException {
-      return storage.readRecord(rid, fetchPlan, ignoreCache, null).getResult();
-    }
-  }
-
-  /**
-   * @Internal
-   */
-  public static final class LatestVersionRecordReader implements RecordReader {
-    @Override
-    public ORawBuffer readRecord(OStorage storage, ORecordId rid, String fetchPlan, boolean ignoreCache, final int recordVersion)
-        throws ORecordNotFoundException {
-      return storage.readRecordIfVersionIsNotLatest(rid, fetchPlan, ignoreCache, recordVersion).getResult();
-    }
-  }
-
   public void checkIfActive() {
     final ODatabaseRecordThreadLocal tl = ODatabaseRecordThreadLocal.INSTANCE;
     final ODatabaseDocumentInternal currentDatabase = tl != null ? tl.get() : null;
@@ -3353,4 +3333,17 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     }
   }
 
+  @Override
+  public OSharedContext getSharedContext() {
+    // NOW NEED TO GET THE CONTEXT FROM RESOURCES IN FUTURE WILL BE NOT NEEDED
+    if(sharedContext == null){
+      sharedContext = storage.getResource(OSharedContext.class.getName(), new Callable<OSharedContext>() {
+        @Override
+        public OSharedContext call() throws Exception {
+          throw new ODatabaseException("Accessing to the database context before the database has bean initialized");
+        }
+      });
+    }
+    return sharedContext;
+  }
 }
