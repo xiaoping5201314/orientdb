@@ -19,15 +19,6 @@
  */
 package com.orientechnologies.orient.server.distributed.impl;
 
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
 import com.hazelcast.core.Member;
@@ -70,12 +61,20 @@ import com.orientechnologies.orient.server.distributed.*;
 import com.orientechnologies.orient.server.distributed.ODistributedServerLog.DIRECTION;
 import com.orientechnologies.orient.server.distributed.impl.task.*;
 import com.orientechnologies.orient.server.distributed.sql.OCommandExecutorSQLHASyncCluster;
-import com.orientechnologies.orient.server.distributed.task.OAbstractRecordReplicatedTask;
 import com.orientechnologies.orient.server.distributed.task.OAbstractReplicatedTask;
 import com.orientechnologies.orient.server.distributed.task.ODistributedDatabaseDeltaSyncException;
 import com.orientechnologies.orient.server.distributed.task.ORemoteTask;
 import com.orientechnologies.orient.server.network.OServerNetworkListener;
 import com.orientechnologies.orient.server.plugin.OServerPluginAbstract;
+
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
 
 /**
  * Abstract plugin to manage the distributed environment.
@@ -112,10 +111,12 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
   protected Map<String, String>                                  activeNodesNamesByMemberId        = new ConcurrentHashMap<String, String>();
   protected List<String>                                         registeredNodeById;
   protected Map<String, Integer>                                 registeredNodeByName;
+  protected Map<String, Long>                                    autoRemovalOfServers              = new ConcurrentHashMap<String, Long>();
   protected ODistributedMessageServiceImpl                       messageService;
   protected Date                                                 startedOn                         = new Date();
   protected ORemoteTaskFactory                                   taskFactory                       = new ODefaultRemoteTaskFactory();
   protected String                                               nodeUuid;
+  protected ODistributedStrategy responseManagerFactory = new ODefaultDistributedStrategy();
 
   private volatile String                                        lastServerDump                    = "";
 
@@ -606,16 +607,17 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
             if (last == null)
               last = 0l;
 
-            if (task instanceof OAbstractRecordReplicatedTask && System.currentTimeMillis() - last > 2000) {
+            if (task instanceof OAbstractReplicatedTask && System.currentTimeMillis() - last > 2000) {
               final ODistributedDatabaseImpl ddb = getMessageService().getDatabase(database.getName());
-              final OLogSequenceNumber lastLSN = ((OAbstractRecordReplicatedTask) task).getLastLSN();
-              if (lastLSN != null)
+              final OLogSequenceNumber lastLSN = ((OAbstractReplicatedTask) task).getLastLSN();
+              if (lastLSN != null) {
                 ddb.getSyncConfiguration().setLSN(task.getNodeSource(), lastLSN);
 
-              ODistributedServerLog.debug(this, nodeName, task.getNodeSource(), DIRECTION.NONE,
-                  "Updating LSN table to the value %s", lastLSN);
+                ODistributedServerLog.debug(this, nodeName, task.getNodeSource(), DIRECTION.NONE,
+                    "Updating LSN table to the value %s", lastLSN);
 
-              lastLSNWriting.put(sourceNodeName, System.currentTimeMillis());
+                lastLSNWriting.put(sourceNodeName, System.currentTimeMillis());
+              }
             }
           }
 
@@ -933,8 +935,6 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
       final Map<String, Object> results = (Map<String, Object>) sendRequest(databaseName, null, targetNodes, deployTask,
           getNextMessageIdCounter(), ODistributedRequest.EXECUTION_MODE.RESPONSE, null, null).getPayload();
 
-      ODistributedServerLog.info(this, nodeName, entry.getKey(), DIRECTION.IN, "Receiving delta sync for '%s'...", databaseName);
-
       ODistributedServerLog.debug(this, nodeName, selectedNodes.toString(), DIRECTION.OUT, "Database delta sync returned: %s",
           results);
 
@@ -947,13 +947,21 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
         if (value instanceof Boolean)
           continue;
         else if (value instanceof ODistributedDatabaseDeltaSyncException) {
-          ODistributedServerLog.error(this, nodeName, r.getKey(), DIRECTION.IN,
-              "Error on installing database delta %s, requesting full database sync...",
-              (ODistributedDatabaseDeltaSyncException) value, databaseName, dbPath);
+          final ODistributedDatabaseDeltaSyncException exc = (ODistributedDatabaseDeltaSyncException) value;
+
+          ODistributedServerLog.warn(this, nodeName, r.getKey(), DIRECTION.IN, "Error on installing database delta for '%s' (%s)",
+              databaseName, exc.getMessage());
+
+          ODistributedServerLog.warn(this, nodeName, r.getKey(), DIRECTION.IN, "Requesting full database '%s' sync...",
+              databaseName);
+
           throw (ODistributedDatabaseDeltaSyncException) value;
+
         } else if (value instanceof Throwable) {
+
           ODistributedServerLog.error(this, nodeName, r.getKey(), DIRECTION.IN, "Error on installing database delta %s in %s (%s)",
               (Exception) value, databaseName, dbPath, value);
+
         } else if (value instanceof ODistributedDatabaseChunk) {
 
           final File uniqueClustersBackupDirectory = getClusterOwnedExclusivelyByCurrentNode(dbPath, databaseName);
@@ -1349,6 +1357,14 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
     });
   }
 
+  public ODistributedStrategy getDistributedStrategy() {
+    return responseManagerFactory;
+  }
+
+  public void setDistributedStrategy(final ODistributedStrategy streatgy) {
+    this.responseManagerFactory = streatgy;
+  }
+
   /**
    * Executes an operation protected by a distributed lock (one per database).
    *
@@ -1699,7 +1715,7 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
     final ODistributedRequest request = new ODistributedRequest(taskFactory, nodeId, getNextMessageIdCounter(), null,
         new OStopServerTask(), ODistributedRequest.EXECUTION_MODE.NO_RESPONSE);
 
-    getRemoteServer(iNode).sendRequest(request, iNode);
+    getRemoteServer(iNode).sendRequest(request);
   }
 
   public void restartNode(final String iNode) throws IOException {
@@ -1708,7 +1724,7 @@ public abstract class ODistributedAbstractPlugin extends OServerPluginAbstract
     final ODistributedRequest request = new ODistributedRequest(taskFactory, nodeId, getNextMessageIdCounter(), null,
         new ORestartServerTask(), ODistributedRequest.EXECUTION_MODE.NO_RESPONSE);
 
-    getRemoteServer(iNode).sendRequest(request, iNode);
+    getRemoteServer(iNode).sendRequest(request);
   }
 
   public Set<String> getAvailableNodeNames(final String iDatabaseName) {

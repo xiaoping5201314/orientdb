@@ -24,12 +24,12 @@ import com.orientechnologies.orient.client.binary.OChannelBinarySynchClient;
 import com.orientechnologies.orient.core.OConstants;
 import com.orientechnologies.orient.core.config.OContextConfiguration;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
-import com.orientechnologies.orient.core.exception.OStorageException;
 import com.orientechnologies.orient.enterprise.channel.binary.OChannelBinaryProtocol;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.util.Date;
 
 /**
  * Remote server channel.
@@ -52,6 +52,7 @@ public class ORemoteServerChannel {
   private int                             sessionId     = -1;
   private byte[]                          sessionToken;
   private OContextConfiguration           contextConfig = new OContextConfiguration();
+  private Date                            createdOn     = new Date();
 
   public ORemoteServerChannel(final ODistributedServerManager manager, final String iServer, final String iURL, final String user,
       final String passwd) throws IOException {
@@ -72,7 +73,7 @@ public class ORemoteServerChannel {
     T execute() throws IOException;
   }
 
-  public void sendRequest(final ODistributedRequest req, final String node) {
+  public void sendRequest(final ODistributedRequest req) {
     networkOperation(OChannelBinaryProtocol.DISTRIBUTED_REQUEST, new OStorageRemoteOperation<Object>() {
       @Override
       public Object execute() throws IOException {
@@ -85,7 +86,7 @@ public class ORemoteServerChannel {
               req.writeExternal(outStream);
               serializedRequest = out.toByteArray();
 
-              ODistributedServerLog.debug(this, manager.getLocalNodeName(), node, ODistributedServerLog.DIRECTION.OUT,
+              ODistributedServerLog.debug(this, manager.getLocalNodeName(), server, ODistributedServerLog.DIRECTION.OUT,
                   "Sending request %s (%d bytes)", req, serializedRequest.length);
 
               channel.writeBytes(serializedRequest);
@@ -106,7 +107,7 @@ public class ORemoteServerChannel {
 
   }
 
-  public void sendResponse(final ODistributedResponse response, final String node) {
+  public void sendResponse(final ODistributedResponse response) {
     networkOperation(OChannelBinaryProtocol.DISTRIBUTED_RESPONSE, new OStorageRemoteOperation<Object>() {
       @Override
       public Object execute() throws IOException {
@@ -118,7 +119,7 @@ public class ORemoteServerChannel {
               response.writeExternal(outStream);
               final byte[] serializedResponse = out.toByteArray();
 
-              ODistributedServerLog.debug(this, manager.getLocalNodeName(), node, ODistributedServerLog.DIRECTION.OUT,
+              ODistributedServerLog.debug(this, manager.getLocalNodeName(), server, ODistributedServerLog.DIRECTION.OUT,
                   "Sending response %s (%d bytes)", response, serializedResponse.length);
 
               channel.writeBytes(serializedResponse);
@@ -196,17 +197,18 @@ public class ORemoteServerChannel {
         if (!autoReconnect)
           break;
 
+        if (!manager.isNodeAvailable(server))
+          break;
+
         ODistributedServerLog.warn(this, manager.getLocalNodeName(), server, ODistributedServerLog.DIRECTION.OUT,
             "Error on sending message to distributed node (%s) retrying (%d/%d)", lastException.toString(), retry, maxRetry);
 
-        try {
-          Thread.sleep(100 * (retry * 2));
-        } catch (InterruptedException e1) {
-          break;
-        }
-
-        if (!manager.isNodeAvailable(server))
-          break;
+        if (retry > 1)
+          try {
+            Thread.sleep(100 * (retry * 2));
+          } catch (InterruptedException e1) {
+            break;
+          }
 
         try {
           connect();
@@ -219,6 +221,18 @@ public class ORemoteServerChannel {
       }
     }
 
-    throw OException.wrapException(new OStorageException(errorMessage), lastException);
+    throw OException.wrapException(new ODistributedException(errorMessage), lastException);
+  }
+
+  public ODistributedServerManager getManager() {
+    return manager;
+  }
+
+  public String getServer() {
+    return server;
+  }
+
+  public Date getCreatedOn() {
+    return createdOn;
   }
 }

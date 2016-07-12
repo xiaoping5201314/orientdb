@@ -38,7 +38,7 @@ import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.conflict.ORecordConflictStrategy;
 import com.orientechnologies.orient.core.db.*;
 import com.orientechnologies.orient.core.db.record.*;
-import com.orientechnologies.orient.core.db.record.ridbag.sbtree.ORidBagDeleteHook;
+import com.orientechnologies.orient.core.db.record.ridbag.sbtree.ORidBagDeleter;
 import com.orientechnologies.orient.core.db.record.ridbag.sbtree.OSBTreeCollectionManager;
 import com.orientechnologies.orient.core.dictionary.ODictionary;
 import com.orientechnologies.orient.core.exception.*;
@@ -63,10 +63,7 @@ import com.orientechnologies.orient.core.query.live.OLiveQueryHook;
 import com.orientechnologies.orient.core.record.ORecord;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.record.ORecordVersionHelper;
-import com.orientechnologies.orient.core.record.impl.OBlob;
-import com.orientechnologies.orient.core.record.impl.ODirtyManager;
-import com.orientechnologies.orient.core.record.impl.ODocument;
-import com.orientechnologies.orient.core.record.impl.ODocumentInternal;
+import com.orientechnologies.orient.core.record.impl.*;
 import com.orientechnologies.orient.core.schedule.OSchedulerTrigger;
 import com.orientechnologies.orient.core.serialization.serializer.binary.OBinarySerializerFactory;
 import com.orientechnologies.orient.core.serialization.serializer.record.ORecordSaveThreadLocal;
@@ -128,6 +125,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
   private OTransaction currentTx;
   private boolean                 keepStorageOpen = false;
   private AtomicReference<Thread> owner           = new AtomicReference<Thread>();
+  private boolean                 ownerProtection = true;
 
   protected ODatabaseSessionMetadata sessionMetadata;
 
@@ -140,11 +138,13 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
    * @param iURL of the database
    */
   public ODatabaseDocumentTx(final String iURL) {
-    this(iURL, false);
+    this(iURL, false, true);
   }
 
-  public ODatabaseDocumentTx(final String iURL, boolean keepStorageOpen) {
+  public ODatabaseDocumentTx(final String iURL, boolean keepStorageOpen, boolean ownerProtection) {
     super(false);
+
+    this.ownerProtection = ownerProtection;
 
     if (iURL == null)
       throw new IllegalArgumentException("URL parameter is null");
@@ -262,7 +262,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       close();
       throw OException.wrapException(new ODatabaseException("Cannot open database url=" + getURL()), e);
     } finally {
-      if (failure)
+      if (failure && ownerProtection)
         owner.set(null);
     }
     return (DB) this;
@@ -321,13 +321,18 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       close();
       throw OException.wrapException(new ODatabaseException("Cannot open database"), e);
     } finally {
-      if (failure)
+      if (failure && ownerProtection) {
         owner.set(null);
+      }
+
     }
     return (DB) this;
   }
 
   private void setupThreadOwner() {
+    if (!ownerProtection)
+      return;
+
     final Thread current = Thread.currentThread();
     final Thread o = owner.get();
 
@@ -478,12 +483,12 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
     callOnDropListeners();
 
+    closeOnDelete();
+
     if (metadata != null) {
       metadata.close();
       metadata = null;
     }
-
-    closeOnDelete();
 
     try {
       if (storage == null)
@@ -614,7 +619,37 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
    * Deletes the record checking the version.
    */
   public ODatabase<ORecord> delete(final ORID iRecord, final int iVersion) {
-    executeDeleteRecord(iRecord, iVersion, true, OPERATION_MODE.SYNCHRONOUS, false);
+    checkIfActive();
+
+    final ORecordId rid = (ORecordId) iRecord.getIdentity();
+    if (rid == null)
+      throw new ODatabaseException(
+          "Cannot delete record because it has no identity. Probably was created from scratch or contains projections of fields "
+              + "rather than a full record");
+
+    if (!rid.isValid())
+      return this;
+
+    final OTransaction originalTx = wrapInImplicitTxIfRequired();
+    try {
+      ORecord record = iRecord.getRecord();
+
+      if (record != null && record.getVersion() != iVersion) {
+        // load a new copy of the record and override the version
+
+        record = load(iRecord, null, true);
+        if (record != null)
+          ORecordInternal.setVersion(record, iVersion);
+      }
+
+      if (record != null)
+        currentTx.deleteRecord(record, OPERATION_MODE.SYNCHRONOUS);
+    } catch (final Exception e) {
+      unwrapIfWasWrappedInImplicitTx(originalTx, false);
+      throw OException.wrapException(new ODatabaseException("Error while deleting record."), e);
+    }
+    unwrapIfWasWrappedInImplicitTx(originalTx, true);
+
     return this;
   }
 
@@ -641,7 +676,14 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
   public ODatabaseDocument delete(final ORecord iRecord, final OPERATION_MODE iMode) {
     checkIfActive();
-    currentTx.deleteRecord(iRecord, iMode);
+    final OTransaction originalTx = wrapInImplicitTxIfRequired();
+    try {
+      currentTx.deleteRecord(iRecord, iMode);
+    } catch (final Exception e) {
+      unwrapIfWasWrappedInImplicitTx(originalTx, false);
+      throw OException.wrapException(new ODatabaseException("Error while deleting record."), e);
+    }
+    unwrapIfWasWrappedInImplicitTx(originalTx, true);
     return this;
   }
 
@@ -1226,6 +1268,9 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
   }
 
   private void clearOwner() {
+    if (!ownerProtection)
+      return;
+
     owner.set(null);
   }
 
@@ -2080,6 +2125,9 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
           if (operationResult.getModifiedRecordContent() != null)
             stream = operationResult.getModifiedRecordContent();
+          else if (version > record.getVersion() + 1)
+            // IN CASE OF REMOTE CONFLICT STRATEGY FORCE UNLOAD DUE TO INVALID CONTENT
+            record.unload();
 
           ORecordInternal.fill(record, rid, version, stream, false);
 
@@ -2147,8 +2195,12 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       try {
         // if cache is switched off record will be unreachable after delete.
         ORecord rec = record.getRecord();
-        if (rec != null)
+        if (rec != null) {
           callbackHooks(ORecordHook.TYPE.BEFORE_DELETE, rec);
+
+          if (rec instanceof ODocument)
+            ORidBagDeleter.deleteAllRidBags((ODocument) rec);
+        }
 
         final OStorageOperationResult<Boolean> operationResult;
         try {
@@ -2252,10 +2304,6 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
       currentTx.rollback(true, 0);
     }
-
-    // CHECK IT'S NOT INSIDE A HOOK
-    if (!inHook.isEmpty())
-      throw new IllegalStateException("Cannot begin a transaction while a hook is executing");
 
     // WAKE UP LISTENERS
     for (ODatabaseListener listener : browseListeners())
@@ -2530,7 +2578,17 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
 
     if (!(iRecord instanceof ODocument)) {
       assignAndCheckCluster(iRecord, iClusterName);
-      return (RET) currentTx.saveRecord(iRecord, iClusterName, iMode, iForceCreate, iRecordCreatedCallback, iRecordUpdatedCallback);
+      final OTransaction originalTx = wrapInImplicitTxIfRequired();
+      final RET ret;
+      try {
+        ret = (RET) currentTx
+            .saveRecord(iRecord, iClusterName, iMode, iForceCreate, iRecordCreatedCallback, iRecordUpdatedCallback);
+      } catch (final Exception e) {
+        unwrapIfWasWrappedInImplicitTx(originalTx, false);
+        throw OException.wrapException(new ODatabaseException("Error while updating record."), e);
+      }
+      unwrapIfWasWrappedInImplicitTx(originalTx, true);
+      return ret;
     }
 
     ODocument doc = (ODocument) iRecord;
@@ -2552,8 +2610,15 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
         checkSecurity(ORule.ResourceGeneric.CLASS, ORole.PERMISSION_UPDATE, doc.getClassName());
     }
 
-    doc = (ODocument) currentTx
-        .saveRecord(iRecord, iClusterName, iMode, iForceCreate, iRecordCreatedCallback, iRecordUpdatedCallback);
+    final OTransaction originalTx = wrapInImplicitTxIfRequired();
+    try {
+      doc = (ODocument) currentTx
+          .saveRecord(iRecord, iClusterName, iMode, iForceCreate, iRecordCreatedCallback, iRecordUpdatedCallback);
+    } catch (final Exception e) {
+      unwrapIfWasWrappedInImplicitTx(originalTx, false);
+      throw OException.wrapException(new ODatabaseException("Error while updating record."), e);
+    }
+    unwrapIfWasWrappedInImplicitTx(originalTx, true);
 
     return (RET) doc;
   }
@@ -2581,17 +2646,22 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     if (record instanceof ODocument && ((ODocument) record).getClassName() != null)
       checkSecurity(ORule.ResourceGeneric.CLASS, ORole.PERMISSION_DELETE, ((ODocument) record).getClassName());
 
+    final OTransaction originalTx = wrapInImplicitTxIfRequired();
     try {
       currentTx.deleteRecord(record, OPERATION_MODE.SYNCHRONOUS);
     } catch (OException e) {
+      unwrapIfWasWrappedInImplicitTx(originalTx, false);
       throw e;
-    } catch (Exception e) {
+    } catch (final Exception e) {
+      unwrapIfWasWrappedInImplicitTx(originalTx, false);
       if (record instanceof ODocument)
         throw OException.wrapException(new ODatabaseException(
             "Error on deleting record " + record.getIdentity() + " of class '" + ((ODocument) record).getClassName() + "'"), e);
       else
         throw OException.wrapException(new ODatabaseException("Error on deleting record " + record.getIdentity()), e);
     }
+    unwrapIfWasWrappedInImplicitTx(originalTx, true);
+
     return this;
   }
 
@@ -3060,7 +3130,6 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
     registerHook(new OSequenceTrigger(this), ORecordHook.HOOK_POSITION.REGULAR);
     registerHook(new OClassIndexManager(this), ORecordHook.HOOK_POSITION.LAST);
     registerHook(new OSchedulerTrigger(this), ORecordHook.HOOK_POSITION.LAST);
-    registerHook(new ORidBagDeleteHook(this), ORecordHook.HOOK_POSITION.LAST);
     registerHook(new OLiveQueryHook(this), ORecordHook.HOOK_POSITION.LAST);
   }
 
@@ -3336,7 +3405,7 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
   @Override
   public OSharedContext getSharedContext() {
     // NOW NEED TO GET THE CONTEXT FROM RESOURCES IN FUTURE WILL BE NOT NEEDED
-    if(sharedContext == null){
+    if (sharedContext == null) {
       sharedContext = storage.getResource(OSharedContext.class.getName(), new Callable<OSharedContext>() {
         @Override
         public OSharedContext call() throws Exception {
@@ -3345,5 +3414,27 @@ public class ODatabaseDocumentTx extends OListenerManger<ODatabaseListener> impl
       });
     }
     return sharedContext;
+  }
+  private OTransaction wrapInImplicitTxIfRequired() {
+    if (currentTx.isActive())
+      return null;
+
+    final OTransaction originalTx = currentTx;
+    begin();
+    return originalTx;
+  }
+
+  private void unwrapIfWasWrappedInImplicitTx(OTransaction originalTx, boolean success) {
+    if (originalTx == null)
+      return;
+
+    try {
+      if (success)
+        commit();
+      else
+        rollback();
+    } finally {
+      currentTx = originalTx;
+    }
   }
 }

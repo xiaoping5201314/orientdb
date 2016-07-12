@@ -304,8 +304,6 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
             // CALL IN DEFAULT MODE TO LET OWN COMMAND TO REDISTRIBUTE CHANGES (LIKE INSERT)
             return wrapped.command(iCommand);
 
-          localDistributedDatabase.checkQuorumBeforeReplicate(task.getQuorumType(), involvedClusters, nodes, dbCfg);
-
           final Object localResult;
 
           final boolean executedLocally = nodes.contains(localNodeName);
@@ -483,16 +481,15 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       // IDEMPOTENT: CHECK IF CAN WORK LOCALLY ONLY
       int maxReadQuorum;
       if (involvedClusters.isEmpty())
-        maxReadQuorum = dbCfg.getReadQuorum(null, availableNodes);
+        maxReadQuorum = dbCfg.getReadQuorum(null, availableNodes, localNodeName);
       else {
         maxReadQuorum = 0;
         for (String cl : involvedClusters)
-          maxReadQuorum = Math.max(maxReadQuorum, dbCfg.getReadQuorum(cl, availableNodes));
+          maxReadQuorum = Math.max(maxReadQuorum, dbCfg.getReadQuorum(cl, availableNodes, localNodeName));
       }
 
-      if (nodes.size() == 1 && nodes.iterator().next().equals(localNodeName) && maxReadQuorum <= 1)
+      if (nodes.contains(localNodeName) && maxReadQuorum <= 1)
         executeLocally = true;
-
     }
 
     return executeLocally;
@@ -526,9 +523,8 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final List<String> nodes = dbCfg.getServers(clusterName, null);
 
       if (nodes.isEmpty())
-        // DON'T REPLICATE OR DISTRIBUTE
-        throw new ODistributedException(
-            "Cannot execute distributed create record " + iRecordId + " because no nodes are available");
+        // NO NODES: EXECUTE LOCALLY ONLY
+        return wrapped.createRecord(iRecordId, iContent, iRecordVersion, iRecordType, iMode, iCallback);
 
       String masterNode = nodes.get(0);
       if (!masterNode.equals(localNodeName)) {
@@ -573,9 +569,6 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final String finalClusterName = clusterName;
 
       final Set<String> clusterNames = Collections.singleton(finalClusterName);
-
-      localDistributedDatabase.checkQuorumBeforeReplicate(OCommandDistributedReplicateRequest.QUORUM_TYPE.WRITE, clusterNames,
-          nodes, dbCfg);
 
       // REMOVE CURRENT NODE BECAUSE IT HAS BEEN ALREADY EXECUTED LOCALLY
       nodes.remove(localNodeName);
@@ -668,7 +661,10 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final int availableNodes = nodes.size();
 
       // CHECK IF LOCAL NODE OWNS THE DATA AND READ-QUORUM = 1: GET IT LOCALLY BECAUSE IT'S FASTER
-      if (nodes.isEmpty() || nodes.contains(dManager.getLocalNodeName()) && dbCfg.getReadQuorum(clusterName, availableNodes) <= 1) {
+      final String localNodeName = dManager.getLocalNodeName();
+
+      if (nodes.isEmpty()
+          || nodes.contains(dManager.getLocalNodeName()) && dbCfg.getReadQuorum(clusterName, availableNodes, localNodeName) <= 1) {
         // DON'T REPLICATE
         return (OStorageOperationResult<ORawBuffer>) OScenarioThreadLocal.executeAsDistributed(new Callable() {
           @Override
@@ -718,7 +714,10 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final int availableNodes = nodes.size();
 
       // CHECK IF LOCAL NODE OWNS THE DATA AND READ-QUORUM = 1: GET IT LOCALLY BECAUSE IT'S FASTER
-      if (nodes.isEmpty() || nodes.contains(dManager.getLocalNodeName()) && dbCfg.getReadQuorum(clusterName, availableNodes) <= 1) {
+      final String localNodeName = dManager.getLocalNodeName();
+
+      if (nodes.isEmpty()
+          || nodes.contains(dManager.getLocalNodeName()) && dbCfg.getReadQuorum(clusterName, availableNodes, localNodeName) <= 1) {
         // DON'T REPLICATE
         return (OStorageOperationResult<ORawBuffer>) OScenarioThreadLocal.executeAsDistributed(new Callable() {
           @Override
@@ -787,13 +786,10 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final List<String> nodes = dbCfg.getServers(clusterName, null);
 
       if (nodes.isEmpty())
-        throw new ODistributedException(
-            "Cannot execute distributed update record " + iRecordId + " because no nodes are available");
+        // NO REPLICATION: EXECUTE IT LOCALLY
+        return wrapped.updateRecord(iRecordId, updateContent, iContent, iVersion, iRecordType, iMode, iCallback);
 
       final Set<String> clusterNames = Collections.singleton(clusterName);
-
-      localDistributedDatabase.checkQuorumBeforeReplicate(OCommandDistributedReplicateRequest.QUORUM_TYPE.WRITE, clusterNames,
-          nodes, dbCfg);
 
       Boolean executionModeSynch = dbCfg.isExecutionModeSynchronous(clusterName);
       if (executionModeSynch == null)
@@ -921,13 +917,10 @@ public class ODistributedStorage implements OStorage, OFreezableStorageComponent
       final List<String> nodes = dbCfg.getServers(clusterName, null);
 
       if (nodes.isEmpty())
-        throw new ODistributedException(
-            "Cannot execute distributed delete record " + iRecordId + " because no nodes are available");
+        // NO NODES: EXECUTE LOCALLY ONLY
+        return wrapped.deleteRecord(iRecordId, iVersion, iMode, iCallback);
 
       final Set<String> clusterNames = Collections.singleton(clusterName);
-
-      localDistributedDatabase.checkQuorumBeforeReplicate(OCommandDistributedReplicateRequest.QUORUM_TYPE.WRITE, clusterNames,
-          nodes, dbCfg);
 
       Boolean executionModeSynch = dbCfg.isExecutionModeSynchronous(clusterName);
       if (executionModeSynch == null)

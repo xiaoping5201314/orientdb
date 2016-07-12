@@ -22,7 +22,10 @@ package com.orientechnologies.orient.stresstest.workload;
 import com.orientechnologies.common.listener.OProgressListener;
 import com.orientechnologies.common.util.OCallable;
 import com.orientechnologies.orient.core.db.ODatabase;
+import com.orientechnologies.orient.core.db.document.ODatabaseDocument;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
+import com.orientechnologies.orient.core.db.tool.ODatabaseRepair;
+import com.orientechnologies.orient.core.db.tool.ODatabaseTool;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.metadata.schema.OClass;
 import com.orientechnologies.orient.core.metadata.schema.OSchema;
@@ -30,6 +33,7 @@ import com.orientechnologies.orient.core.metadata.schema.OType;
 import com.orientechnologies.orient.core.record.impl.ODocument;
 import com.orientechnologies.orient.core.sql.query.OSQLSynchQuery;
 import com.orientechnologies.orient.stresstest.ODatabaseIdentifier;
+import com.orientechnologies.orient.stresstest.OStressTesterSettings;
 
 import java.util.List;
 
@@ -38,7 +42,7 @@ import java.util.List;
  *
  * @author Luca Garulli
  */
-public class OCRUDWorkload extends OBaseDocumentWorkload {
+public class OCRUDWorkload extends OBaseDocumentWorkload implements OCheckWorkload {
 
   public static final String CLASS_NAME           = "StressTestCRUD";
   public static final String INDEX_NAME           = CLASS_NAME + ".Index";
@@ -95,52 +99,56 @@ public class OCRUDWorkload extends OBaseDocumentWorkload {
   }
 
   @Override
-  public void execute(final int concurrencyLevel, final ODatabaseIdentifier databaseIdentifier) {
+  public void execute(final OStressTesterSettings settings, final ODatabaseIdentifier databaseIdentifier) {
     createSchema(databaseIdentifier);
 
     // PREALLOCATE THE LIST TO AVOID CONCURRENCY ISSUES
     final ORID[] records = new ORID[createsResult.total];
 
-    executeOperation(databaseIdentifier, createsResult, concurrencyLevel, new OCallable<Void, OBaseWorkLoadContext>() {
-      @Override
-      public Void call(final OBaseWorkLoadContext context) {
-        final ODocument doc = createOperation(context.currentIdx);
-        records[context.currentIdx] = doc.getIdentity();
-        createsResult.current.incrementAndGet();
-        return null;
-      }
-    });
+    executeOperation(databaseIdentifier, createsResult, settings.concurrencyLevel, settings.operationsPerTransaction,
+        new OCallable<Void, OBaseWorkLoadContext>() {
+          @Override
+          public Void call(final OBaseWorkLoadContext context) {
+            final ODocument doc = createOperation(context.currentIdx);
+            records[context.currentIdx] = doc.getIdentity();
+            createsResult.current.incrementAndGet();
+            return null;
+          }
+        });
 
     if (records.length != createsResult.total)
       throw new RuntimeException("Error on creating records: found " + records.length + " but expected " + createsResult.total);
 
-    executeOperation(databaseIdentifier, readsResult, concurrencyLevel, new OCallable<Void, OBaseWorkLoadContext>() {
-      @Override
-      public Void call(final OBaseWorkLoadContext context) {
-        readOperation(((OWorkLoadContext) context).getDb(), context.currentIdx);
-        readsResult.current.incrementAndGet();
-        return null;
-      }
-    });
+    executeOperation(databaseIdentifier, readsResult, settings.concurrencyLevel, settings.operationsPerTransaction,
+        new OCallable<Void, OBaseWorkLoadContext>() {
+          @Override
+          public Void call(final OBaseWorkLoadContext context) {
+            readOperation(((OWorkLoadContext) context).getDb(), context.currentIdx);
+            readsResult.current.incrementAndGet();
+            return null;
+          }
+        });
 
-    executeOperation(databaseIdentifier, updatesResult, concurrencyLevel, new OCallable<Void, OBaseWorkLoadContext>() {
-      @Override
-      public Void call(final OBaseWorkLoadContext context) {
-        updateOperation(((OWorkLoadContext) context).getDb(), records[context.currentIdx]);
-        updatesResult.current.incrementAndGet();
-        return null;
-      }
-    });
+    executeOperation(databaseIdentifier, updatesResult, settings.concurrencyLevel, settings.operationsPerTransaction,
+        new OCallable<Void, OBaseWorkLoadContext>() {
+          @Override
+          public Void call(final OBaseWorkLoadContext context) {
+            updateOperation(((OWorkLoadContext) context).getDb(), records[context.currentIdx]);
+            updatesResult.current.incrementAndGet();
+            return null;
+          }
+        });
 
-    executeOperation(databaseIdentifier, deletesResult, concurrencyLevel, new OCallable<Void, OBaseWorkLoadContext>() {
-      @Override
-      public Void call(final OBaseWorkLoadContext context) {
-        deleteOperation(((OWorkLoadContext) context).getDb(), records[context.currentIdx]);
-        records[context.currentIdx] = null;
-        deletesResult.current.incrementAndGet();
-        return null;
-      }
-    });
+    executeOperation(databaseIdentifier, deletesResult, settings.concurrencyLevel, settings.operationsPerTransaction,
+        new OCallable<Void, OBaseWorkLoadContext>() {
+          @Override
+          public Void call(final OBaseWorkLoadContext context) {
+            deleteOperation(((OWorkLoadContext) context).getDb(), records[context.currentIdx]);
+            records[context.currentIdx] = null;
+            deletesResult.current.incrementAndGet();
+            return null;
+          }
+        });
   }
 
   protected void createSchema(ODatabaseIdentifier databaseIdentifier) {
@@ -150,6 +158,7 @@ public class OCRUDWorkload extends OBaseDocumentWorkload {
       if (!schema.existsClass(OCRUDWorkload.CLASS_NAME)) {
         final OClass cls = schema.createClass(OCRUDWorkload.CLASS_NAME);
         cls.createProperty("name", OType.STRING);
+        // cls.createIndex(INDEX_NAME, OClass.INDEX_TYPE.UNIQUE_HASH_INDEX.toString(), "name");
         cls.createIndex(INDEX_NAME, OClass.INDEX_TYPE.UNIQUE.toString(), (OProgressListener) null, (ODocument) null, "AUTOSHARDING",
             new String[] { "name" });
       }
@@ -174,17 +183,17 @@ public class OCRUDWorkload extends OBaseDocumentWorkload {
   public String getFinalResult() {
     final StringBuilder buffer = new StringBuilder(getErrors());
 
-    buffer.append(String.format("- Created %d records in %.3f secs\n  %s", createsResult.total, (createsResult.totalTime / 1000f),
-        createsResult.toOutput()));
+    buffer.append(String.format("- Created %d records in %.3f secs%s", createsResult.total, (createsResult.totalTime / 1000f),
+        createsResult.toOutput(1)));
 
-    buffer.append(String.format("\n- Read    %d records in %.3f secs\n  %s", readsResult.total, (readsResult.totalTime / 1000f),
-        readsResult.toOutput()));
+    buffer.append(String.format("\n- Read %d records in %.3f secs%s", readsResult.total, (readsResult.totalTime / 1000f),
+        readsResult.toOutput(1)));
 
-    buffer.append(String.format("\n- Updated %d records in %.3f secs\n  %s", updatesResult.total, (updatesResult.totalTime / 1000f),
-        updatesResult.toOutput()));
+    buffer.append(String.format("\n- Updated %d records in %.3f secs%s", updatesResult.total, (updatesResult.totalTime / 1000f),
+        updatesResult.toOutput(1)));
 
-    buffer.append(String.format("\n- Deleted %d records in %.3f secs\n  %s", deletesResult.total, (deletesResult.totalTime / 1000f),
-        deletesResult.toOutput()));
+    buffer.append(String.format("\n- Deleted %d records in %.3f secs%s", deletesResult.total, (deletesResult.totalTime / 1000f),
+        deletesResult.toOutput(1)));
 
     return buffer.toString();
   }
@@ -196,9 +205,9 @@ public class OCRUDWorkload extends OBaseDocumentWorkload {
     json.field("type", getName());
 
     json.field("creates", createsResult.toJSON(), OType.EMBEDDED);
-    json.field("reads", createsResult.toJSON(), OType.EMBEDDED);
-    json.field("updates", createsResult.toJSON(), OType.EMBEDDED);
-    json.field("deletes", createsResult.toJSON(), OType.EMBEDDED);
+    json.field("reads", readsResult.toJSON(), OType.EMBEDDED);
+    json.field("updates", updatesResult.toJSON(), OType.EMBEDDED);
+    json.field("deletes", deletesResult.toJSON(), OType.EMBEDDED);
 
     return json.toJSON("");
   }
@@ -259,5 +268,12 @@ public class OCRUDWorkload extends OBaseDocumentWorkload {
 
   public int getDeletes() {
     return deletesResult.total;
+  }
+
+  @Override
+  public void check(final ODatabaseIdentifier databaseIdentifier) {
+    final ODatabaseDocument db = (ODatabaseDocument) getDocumentDatabase(databaseIdentifier);
+    final ODatabaseTool repair = new ODatabaseRepair().setDatabase(db);
+    repair.run();
   }
 }

@@ -19,6 +19,14 @@
  */
 package com.orientechnologies.orient.server.hazelcast;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.util.*;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.Lock;
+
 import com.hazelcast.config.FileSystemXmlConfig;
 import com.hazelcast.core.*;
 import com.hazelcast.spi.exception.RetryableHazelcastException;
@@ -45,14 +53,6 @@ import com.orientechnologies.orient.server.distributed.impl.ODistributedDatabase
 import com.orientechnologies.orient.server.distributed.impl.ODistributedMessageServiceImpl;
 import com.orientechnologies.orient.server.distributed.impl.ODistributedStorage;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.security.SecureRandom;
-import java.util.*;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.Lock;
-
 /**
  * Hazelcast implementation for clustering.
  *
@@ -60,19 +60,19 @@ import java.util.concurrent.locks.Lock;
  */
 public class OHazelcastPlugin extends ODistributedAbstractPlugin implements MembershipListener, EntryListener<String, Object> {
 
-  public static final String CONFIG_DATABASE_PREFIX = "database.";
+  public static final String           CONFIG_DATABASE_PREFIX = "database.";
 
-  protected static final String CONFIG_NODE_PREFIX     = "node.";
-  protected static final String CONFIG_DBSTATUS_PREFIX = "dbstatus.";
-  protected static final String CONFIG_REGISTEREDNODES = "registeredNodes";
+  protected static final String        CONFIG_NODE_PREFIX     = "node.";
+  protected static final String        CONFIG_DBSTATUS_PREFIX = "dbstatus.";
+  protected static final String        CONFIG_REGISTEREDNODES = "registeredNodes";
 
-  protected String hazelcastConfigFile = "hazelcast.xml";
-  protected          String            membershipListenerRegistration;
-  protected          String            membershipListenerMapRegistration;
+  protected String                     hazelcastConfigFile    = "hazelcast.xml";
+  protected String                     membershipListenerRegistration;
+  protected String                     membershipListenerMapRegistration;
   protected volatile HazelcastInstance hazelcastInstance;
 
   // THIS MAP IS BACKED BY HAZELCAST EVENTS. IN THIS WAY WE AVOID TO USE HZ MAP DIRECTLY
-  protected OHazelcastDistributedMap configurationMap;
+  protected OHazelcastDistributedMap   configurationMap;
 
   public OHazelcastPlugin() {
   }
@@ -425,6 +425,9 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
 
   public void updateCachedDatabaseConfiguration(final String iDatabaseName, final ODocument cfg, final boolean iSaveToDisk,
       final boolean iDeployToCluster) {
+    // VALIDATE THE CONFIGURATION FIRST
+    getDistributedStrategy().validateConfiguration(new ODistributedConfiguration(cfg));
+
     final boolean updated = super.updateCachedDatabaseConfiguration(iDatabaseName, cfg, iSaveToDisk);
 
     if (updated) {
@@ -643,14 +646,16 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
 
       final Member member = iEvent.getMember();
       final String nodeLeftName = getNodeName(member);
-      if (nodeLeftName != null) {
-        try {
-          final int nodeLeftId = getNodeIdByName(nodeLeftName);
 
+      if (nodeLeftName != null) {
+        ODistributedServerLog.debug(this, nodeName, nodeLeftName, ODistributedServerLog.DIRECTION.NONE,
+            "Distributed server is '%s' unreachable", nodeLeftName);
+
+        try {
           // REMOVE INTRA SERVER CONNECTION
           closeRemoteServer(nodeLeftName);
 
-          // NOTIFY NODE LEFT
+          // NOTIFY ABOUT THE NODE HAS LEFT
           for (ODistributedLifecycleListener l : listeners)
             try {
               l.onNodeLeft(nodeLeftName);
@@ -659,9 +664,11 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
             }
 
           // UNLOCK ANY PENDING LOCKS
-          if (messageService != null)
+          if (messageService != null) {
+            final int nodeLeftId = getNodeIdByName(nodeLeftName);
             for (String dbName : messageService.getDatabases())
               messageService.getDatabase(dbName).handleUnreachableNode(nodeLeftId);
+          }
 
           activeNodes.remove(nodeLeftName);
           activeNodesNamesByMemberId.remove(member.getUuid());
@@ -669,31 +676,30 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
           if (hazelcastInstance == null || !hazelcastInstance.getLifecycleService().isRunning())
             return;
 
-          final Map<String, Object> map = configurationMap;
+          final long autoRemoveOffLineServer = OGlobalConfiguration.DISTRIBUTED_AUTO_REMOVE_OFFLINE_SERVERS.getValueAsLong();
+          if (autoRemoveOffLineServer == 0)
+            // REMOVE THE NODE RIGHT NOW
+            removeNodeFromConfiguration(nodeLeftName);
+          else if (autoRemoveOffLineServer > 0) {
+            // SCHEDULE AUTO REMOVAL IN A WHILE
+            autoRemovalOfServers.put(nodeLeftName, System.currentTimeMillis());
+            Orient.instance().scheduleTask(new TimerTask() {
+              @Override
+              public void run() {
+                final Long lastTimeNodeLeft = autoRemovalOfServers.get(nodeLeftName);
+                if (lastTimeNodeLeft == null)
+                  // NODE WAS BACK ONLINE
+                  return;
 
-          // UNREGISTER DB STATUSES
-          final HashSet<String> entriesToRemove = new HashSet<String>();
-          for (Iterator<String> it = map.keySet().iterator(); it.hasNext(); ) {
-            final String n = it.next();
-
-            if (n.startsWith(CONFIG_DBSTATUS_PREFIX)) {
-              final String part = n.substring(CONFIG_DBSTATUS_PREFIX.length());
-              final int pos = part.indexOf(".");
-              if (pos > -1) {
-                // CHECK ANY DB STATUS OF THE LEFT NODE
-                if (part.substring(0, pos).equals(nodeLeftName)) {
-                  ODistributedServerLog
-                      .debug(this, nodeName, null, DIRECTION.NONE, "Removing dbstatus for the node %s that just left: %s",
-                          nodeLeftName, n);
-                  entriesToRemove.add(n);
+                if (System.currentTimeMillis() - lastTimeNodeLeft >= autoRemoveOffLineServer) {
+                  removeNodeFromConfiguration(nodeLeftName);
                 }
               }
-            }
+            }, autoRemoveOffLineServer, 0);
           }
 
-          // REMOVE THE ENTRIES
-          for (String entry : entriesToRemove) {
-            map.remove(entry);
+          for (String databaseName : getManagedDatabases()) {
+            configurationMap.remove(CONFIG_DBSTATUS_PREFIX + nodeLeftName + "." + databaseName);
           }
 
           ODistributedServerLog.warn(this, nodeLeftName, null, DIRECTION.NONE, "Node removed id=%s name=%s", member, nodeLeftName);
@@ -736,8 +742,12 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
 
     try {
       updateLastClusterChange();
+      final String addedNodeName = getNodeName(iEvent.getMember());
       ODistributedServerLog.warn(this, nodeName, null, DIRECTION.NONE, "Added new node id=%s name=%s", iEvent.getMember(),
-          getNodeName(iEvent.getMember()));
+          addedNodeName);
+
+      // REMOVE THE NODE FROM AUTO REMOVAL
+      autoRemovalOfServers.remove(addedNodeName);
 
     } catch (HazelcastInstanceNotActiveException e) {
       OLogManager.instance().error(this, "Hazelcast is not running");
@@ -831,9 +841,8 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
       if (availableNodes == 0) {
         // LAST NODE HOLDING THE DATABASE, DELETE DISTRIBUTED CFG TOO
         configurationMap.remove(OHazelcastPlugin.CONFIG_DATABASE_PREFIX + dbName);
-        ODistributedServerLog
-            .info(this, getLocalNodeName(), null, DIRECTION.NONE, "Dropped last copy of database %s, removing it from the cluster",
-                dbName);
+        ODistributedServerLog.info(this, getLocalNodeName(), null, DIRECTION.NONE,
+            "Dropped last copy of database %s, removing it from the cluster", dbName);
       }
     }
   }
@@ -899,5 +908,31 @@ public class OHazelcastPlugin extends ODistributedAbstractPlugin implements Memb
     }
 
     return registeredNodes;
+  }
+
+  public void removeNodeFromConfiguration(final String nodeLeftName) {
+    ODistributedServerLog.info(this, getLocalNodeName(), null, DIRECTION.NONE, "Removing server '%s' from all the databases...",
+        nodeLeftName);
+
+    for (String dbName : getManagedDatabases()) {
+      removeNodeFromConfiguration(nodeLeftName, dbName);
+    }
+  }
+
+  public boolean removeNodeFromConfiguration(final String nodeLeftName, final String databaseName) {
+    ODistributedServerLog.info(this, getLocalNodeName(), null, DIRECTION.NONE,
+        "Removing server '%s' from database configuration '%s'...", nodeLeftName, databaseName);
+
+    final ODistributedConfiguration cfg = getDatabaseConfiguration(databaseName);
+
+    final boolean found = cfg.removeServer(nodeLeftName) != null;
+
+    if (found)
+      // SERVER REMOVED CORRECTLY
+      updateCachedDatabaseConfiguration(databaseName, cfg.getDocument(), true, true);
+
+    configurationMap.remove(CONFIG_DBSTATUS_PREFIX + nodeLeftName + "." + databaseName);
+
+    return found;
   }
 }

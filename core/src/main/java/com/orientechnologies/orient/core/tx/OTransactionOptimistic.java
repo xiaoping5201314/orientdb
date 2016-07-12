@@ -62,6 +62,9 @@ public class OTransactionOptimistic extends OTransactionRealAbstract {
   private boolean              usingLog = true;
   private int                  txStartCounter;
 
+  private ORecordCallback<Long>    recordCreatedCallback  = null;
+  private ORecordCallback<Integer> recordUpdatedCallback  = null;
+
   public OTransactionOptimistic(final ODatabaseDocumentInternal iDatabase) {
     super(iDatabase, txSerial.incrementAndGet());
   }
@@ -334,6 +337,10 @@ public class OTransactionOptimistic extends OTransactionRealAbstract {
   public ORecord saveRecord(final ORecord iRecord, final String iClusterName, final OPERATION_MODE iMode,
       final boolean iForceCreate, final ORecordCallback<? extends Number> iRecordCreatedCallback,
       final ORecordCallback<Integer> iRecordUpdatedCallback) {
+
+    this.recordCreatedCallback = (ORecordCallback<Long>) iRecordCreatedCallback;
+    this.recordUpdatedCallback = iRecordUpdatedCallback;
+
     if (iRecord == null)
       return null;
 
@@ -534,6 +541,13 @@ public class OTransactionOptimistic extends OTransactionRealAbstract {
     }
   }
 
+  @Override
+  public void close() {
+    recordCreatedCallback = null;
+    recordUpdatedCallback = null;
+    super.close();
+  }
+
   private void doCommit() {
     if (status == TXSTATUS.ROLLED_BACK || status == TXSTATUS.ROLLBACKING)
       throw new ORollbackException("Given transaction was rolled back and cannot be used.");
@@ -562,9 +576,25 @@ public class OTransactionOptimistic extends OTransactionRealAbstract {
       }
     }
 
+    invokeCallbacks();
+
     close();
 
     status = TXSTATUS.COMPLETED;
+  }
+
+  private void invokeCallbacks() {
+    if (recordCreatedCallback != null || recordUpdatedCallback != null) {
+      for (ORecordOperation operation : allEntries.values()) {
+        final ORecord record = operation.getRecord();
+        final ORID identity = record.getIdentity();
+
+        if (operation.type == ORecordOperation.CREATED && recordCreatedCallback != null)
+          recordCreatedCallback.call(new ORecordId(identity), identity.getClusterPosition());
+        else if (operation.type == ORecordOperation.UPDATED && recordUpdatedCallback != null)
+          recordUpdatedCallback.call(new ORecordId(identity), record.getVersion());
+      }
+    }
   }
 
   private OUncompletedCommit<Void> doInitiateCommit() {
@@ -616,6 +646,8 @@ public class OTransactionOptimistic extends OTransactionRealAbstract {
 
       if (nestedCommit != null)
         nestedCommit.complete();
+
+      invokeCallbacks();
 
       close();
       status = TXSTATUS.COMPLETED;

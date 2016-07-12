@@ -68,7 +68,6 @@ import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.record.impl.OBlob;
 import com.orientechnologies.orient.core.record.impl.ODocument;
 import com.orientechnologies.orient.core.serialization.OMemoryStream;
-import com.orientechnologies.orient.core.serialization.serializer.ONetworkThreadLocalSerializer;
 import com.orientechnologies.orient.core.serialization.serializer.record.ORecordSerializer;
 import com.orientechnologies.orient.core.serialization.serializer.record.ORecordSerializerFactory;
 import com.orientechnologies.orient.core.serialization.serializer.record.OSerializationThreadLocal;
@@ -117,12 +116,12 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   private long    distributedRequests  = 0;
   private long    distributedResponses = 0;
 
-  public ONetworkProtocolBinary() {
-    this("OrientDB <- BinaryClient/?");
+  public ONetworkProtocolBinary(OServer server) {
+    this(server,"OrientDB <- BinaryClient/?");
   }
 
-  public ONetworkProtocolBinary(final String iThreadName) {
-    super(Orient.instance().getThreadGroup(), iThreadName);
+  public ONetworkProtocolBinary(OServer server, final String iThreadName) {
+    super(server.getThreadGroup(), iThreadName);
     logClientExceptions = Level.parse(OGlobalConfiguration.SERVER_LOG_DUMP_CLIENT_EXCEPTION_LEVEL.getValueAsString());
     logClientFullStackTrace = OGlobalConfiguration.SERVER_LOG_DUMP_CLIENT_EXCEPTION_FULLSTACKTRACE.getValueAsBoolean();
   }
@@ -245,7 +244,8 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     OClientConnection connection = server.getClientConnectionManager().getConnection(clientTxId, this);
     try {
       boolean noToken = false;
-      if (connection == null && clientTxId < 0 && requestType != OChannelBinaryProtocol.REQUEST_DB_REOPEN) {
+      if (connection == null && clientTxId < 0 && (requestType == OChannelBinaryProtocol.REQUEST_DB_OPEN
+          || requestType == OChannelBinaryProtocol.REQUEST_CONNECT)) {
         // OPEN OF OLD STYLE SESSION.
         noToken = true;
       }
@@ -258,6 +258,10 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
         // CONNECTION WITHOUT TOKEN/OLD MODE
         noToken = true;
       }
+
+      if(connection == null && clientTxId < 0  && requestType == OChannelBinaryProtocol.REQUEST_DB_CLOSE)
+        //CLOSE OF NOT EXISTING SESSION, DO NOTHING
+        return null;
 
       if (noToken) {
         if (clientTxId < 0) {
@@ -1261,10 +1265,18 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     final OTransactionOptimisticProxy tx = new OTransactionOptimisticProxy(connection, this);
 
     try {
-      connection.getDatabase().begin(tx);
+      try {
+        connection.getDatabase().begin(tx);
+      } catch (final ORecordNotFoundException e) {
+        throw e.getCause() instanceof OOfflineClusterException ? (OOfflineClusterException) e.getCause() : e;
+      }
 
       try {
-        connection.getDatabase().commit();
+        try {
+          connection.getDatabase().commit();
+        } catch (final ORecordNotFoundException e) {
+          throw e.getCause() instanceof OOfflineClusterException ? (OOfflineClusterException) e.getCause() : e;
+        }
         beginResponse();
         try {
           sendOk(connection, clientTxId);
@@ -1321,15 +1333,16 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     byte type = channel.readByte();
     final boolean live = type == 'l';
     final boolean asynch = type == 'a';
+    if(connection == null && connection.getDatabase() == null)
+      throw new IOException("Found invalid session");
+
     String dbSerializerName = connection.getDatabase().getSerializer().toString();
     String name = getRecordSerializerName(connection);
+    if(name == null)
+      name = dbSerializerName;
+    ORecordSerializer ser = ORecordSerializerFactory.instance().getFormat(name);
 
-    if (!dbSerializerName.equals(name)) {
-      ORecordSerializer ser = ORecordSerializerFactory.instance().getFormat(name);
-      ONetworkThreadLocalSerializer.setNetworkSerializer(ser);
-    }
-    OCommandRequestText command = (OCommandRequestText) OStreamSerializerAnyStreamable.INSTANCE.fromStream(channel.readBytes());
-    ONetworkThreadLocalSerializer.setNetworkSerializer(null);
+    OCommandRequestText command = OStreamSerializerAnyStreamable.INSTANCE.fromStream(channel.readBytes(),ser);
 
     final Map<Object, Object> params = command.getParameters();
 
@@ -2661,7 +2674,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
   }
 
   protected int cleanOutRecord(final ODatabaseDocument iDatabase, final ORID rid, final int version) {
-    iDatabase.delete(rid, version);
+    iDatabase.cleanOutRecord(rid, version);
     return 1;
   }
 
