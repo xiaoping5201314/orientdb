@@ -1845,6 +1845,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     @Override
     public Void call() throws Exception {
+      System.out.println("Flush file with id " + fileId);
+
       final PageKey firstKey = new PageKey(fileId, 0);
       final PageKey lastKey = new PageKey(fileId, Long.MAX_VALUE);
 
