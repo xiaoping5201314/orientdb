@@ -24,6 +24,7 @@ import com.orientechnologies.common.concur.lock.OComparableLockManager;
 import com.orientechnologies.common.concur.lock.OModificationOperationProhibitedException;
 import com.orientechnologies.common.concur.lock.OPartitionedLockManager;
 import com.orientechnologies.common.exception.OException;
+import com.orientechnologies.common.io.OIOException;
 import com.orientechnologies.common.log.OLogManager;
 import com.orientechnologies.common.serialization.types.OBinarySerializer;
 import com.orientechnologies.common.types.OModifiableBoolean;
@@ -59,7 +60,6 @@ import com.orientechnologies.orient.core.index.engine.OHashTableIndexEngine;
 import com.orientechnologies.orient.core.index.engine.OSBTreeIndexEngine;
 import com.orientechnologies.orient.core.metadata.OMetadataDefault;
 import com.orientechnologies.orient.core.metadata.OMetadataInternal;
-import com.orientechnologies.orient.core.metadata.schema.OClass;
 import com.orientechnologies.orient.core.metadata.schema.OImmutableClass;
 import com.orientechnologies.orient.core.metadata.schema.OType;
 import com.orientechnologies.orient.core.metadata.security.OSecurityUser;
@@ -224,8 +224,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
       if (OGlobalConfiguration.STORAGE_MAKE_FULL_CHECKPOINT_AFTER_OPEN.getValueAsBoolean())
         makeFullCheckpoint();
-
-      writeCache.startFuzzyCheckpoints();
 
       status = STATUS.OPEN;
 
@@ -411,7 +409,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (OGlobalConfiguration.STORAGE_MAKE_FULL_CHECKPOINT_AFTER_CREATE.getValueAsBoolean())
         makeFullCheckpoint();
 
-      writeCache.startFuzzyCheckpoints();
       postCreateSteps();
 
     } catch (OStorageException e) {
@@ -739,10 +736,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
    * @param lsn                LSN from which we should find changed records
    * @param stream             Stream which will contain found records
    * @param excludedClusterIds Array of cluster ids to exclude from the export
-   *
    * @return Last LSN processed during examination of changed records, or <code>null</code> if it was impossible to find changed
    * records: write ahead log is absent, record with start LSN was not found in WAL, etc.
-   *
    * @see OGlobalConfiguration#STORAGE_TRACK_CHANGED_RECORDS_IN_WAL
    */
   public OLogSequenceNumber recordsChangedAfterLSN(final OLogSequenceNumber lsn, final OutputStream stream,
@@ -2916,7 +2911,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   protected void lock() throws IOException {
     OLogManager.instance().debug(this, "Locking storage %s...", name);
     configuration.lock();
-    writeCache.lock();
   }
 
   /**
@@ -2925,7 +2919,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   protected void unlock() throws IOException {
     OLogManager.instance().debug(this, "Unlocking storage %s...", name);
     configuration.unlock();
-    writeCache.unlock();
   }
 
   private ORawBuffer readRecordIfNotLatest(final OCluster cluster, final ORecordId rid, final int recordVersion)
@@ -3423,9 +3416,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
    * Register the cluster internally.
    *
    * @param cluster OCluster implementation
-   *
    * @return The id (physical position into the array) of the new cluster just created. First is 0.
-   *
    * @throws IOException
    */
   private int registerCluster(final OCluster cluster) throws IOException {
@@ -4126,6 +4117,22 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     }
   }
 
+  protected void makeFuzzyCheckpoint() {
+    stateLock.acquireReadLock();
+    try {
+      if (status != STATUS.OPEN || writeAheadLog == null)
+        return;
+
+      final long fuzzySegment = fetchMinDirtyLSN();
+      writeCache.makeFuzzyCheckpoint(fuzzySegment);
+
+    } catch (IOException ioe) {
+      throw OException.wrapException(new OIOException("Error during fuzzy checkpoint"), ioe);
+    } finally {
+      stateLock.releaseReadLock();
+    }
+  }
+
   private void checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions() {
     if (transaction.get() != null)
       return;
@@ -4133,7 +4140,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     if (lowDiskSpace != null) {
       if (checkpointInProgress.compareAndSet(false, true)) {
         try {
-          writeCache.makeFuzzyCheckpoint();
+          makeFuzzyCheckpoint();
 
           if (writeCache.checkLowDiskSpace()) {
             synch();
@@ -4164,7 +4171,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
           final ODiskWriteAheadLog diskWriteAheadLog = (ODiskWriteAheadLog) writeAheadLog;
           final long size = diskWriteAheadLog.size();
 
-          writeCache.makeFuzzyCheckpoint();
+          makeFuzzyCheckpoint();
+
           if (size <= diskWriteAheadLog.size())
             synch();
 
@@ -4180,6 +4188,25 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
               "Error in data flush background thread, please restart database and send full stack trace inside of bug report"),
           dataFlushException);
     }
+  }
+
+  private long fetchMinDirtyLSN() {
+    long fuzzySegment;
+    OLogSequenceNumber minLSN;
+
+    final long lockId = atomicOperationsManager.freezeAtomicOperations(null, null);
+    try {
+      minLSN = writeCache.getMinimalNotFlushedLSN();
+
+      if (minLSN == null)
+        minLSN = writeAheadLog.getFlushedLsn();
+    } finally {
+      atomicOperationsManager.releaseAtomicOperations(lockId);
+    }
+
+    fuzzySegment = minLSN.getSegment();
+
+    return fuzzySegment;
   }
 
   private static class ORIDOLockManager extends OComparableLockManager<ORID> {

@@ -21,7 +21,7 @@ public class ONullBucketTest {
     OByteBufferPool bufferPool = new OByteBufferPool(1024);
     ByteBuffer buffer = bufferPool.acquireDirect(true);
 
-    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, new OLogSequenceNumber(0, 0), 0, 0);
+    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, 0, 0);
     cachePointer.incrementReferrer();
 
     OCacheEntry cacheEntry = new OCacheEntry(0, 0, cachePointer, false);
@@ -38,7 +38,7 @@ public class ONullBucketTest {
     OByteBufferPool bufferPool = new OByteBufferPool(1024);
     ByteBuffer buffer = bufferPool.acquireDirect(true);
 
-    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, new OLogSequenceNumber(0, 0), 0, 0);
+    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, 0, 0);
     cachePointer.incrementReferrer();
 
     OCacheEntry cacheEntry = new OCacheEntry(0, 0, cachePointer, false);
@@ -58,7 +58,7 @@ public class ONullBucketTest {
     OByteBufferPool bufferPool = new OByteBufferPool(1024);
     ByteBuffer buffer = bufferPool.acquireDirect(true);
 
-    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, new OLogSequenceNumber(0, 0), 0, 0);
+    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, 0, 0);
     cachePointer.incrementReferrer();
 
     OCacheEntry cacheEntry = new OCacheEntry(0, 0, cachePointer, false);
@@ -80,7 +80,7 @@ public class ONullBucketTest {
     OByteBufferPool bufferPool = new OByteBufferPool(1024);
     ByteBuffer buffer = bufferPool.acquireDirect(true);
 
-    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, new OLogSequenceNumber(0, 0), 0, 0);
+    OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, 0, 0);
     cachePointer.incrementReferrer();
 
     OCacheEntry cacheEntry = new OCacheEntry(0, 0, cachePointer, false);

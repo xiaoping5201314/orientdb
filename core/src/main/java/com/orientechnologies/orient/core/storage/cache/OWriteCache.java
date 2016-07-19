@@ -24,6 +24,7 @@ import com.orientechnologies.common.types.OModifiableBoolean;
 import com.orientechnologies.orient.core.command.OCommandOutputListener;
 import com.orientechnologies.orient.core.storage.cache.local.OBackgroundExceptionListener;
 import com.orientechnologies.orient.core.storage.impl.local.OLowDiskSpaceListener;
+import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.OLogSequenceNumber;
 import com.orientechnologies.orient.core.storage.impl.local.statistic.OPerformanceStatisticManager;
 
 import java.io.File;
@@ -32,7 +33,6 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 public interface OWriteCache {
-  void startFuzzyCheckpoints();
 
   void addLowDiskSpaceListener(OLowDiskSpaceListener listener);
 
@@ -70,11 +70,7 @@ public interface OWriteCache {
 
   boolean checkLowDiskSpace();
 
-  void makeFuzzyCheckpoint();
-
-  void lock() throws IOException;
-
-  void unlock() throws IOException;
+  void makeFuzzyCheckpoint(long segmentId) throws IOException;
 
   boolean exists(String fileName);
 
@@ -157,6 +153,15 @@ public interface OWriteCache {
    * @see #getId()
    */
   long externalFileId(int fileId);
+
+  /**
+   * Minimal LSN of operation which is not yet flushed to WAL.
+   * This method should be called when there are no atomic operations at the moment otherwise because of operations reordering
+   * value of minimal LSN may be different than returned one.
+   *
+   * @return Minimal LSN of operation which is not yet flushed to WAL.
+   */
+  OLogSequenceNumber getMinimalNotFlushedLSN();
 
   OPerformanceStatisticManager getPerformanceStatisticManager();
 }

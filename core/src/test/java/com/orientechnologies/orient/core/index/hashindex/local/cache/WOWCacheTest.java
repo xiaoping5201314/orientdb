@@ -11,7 +11,6 @@ import com.orientechnologies.common.directmemory.OByteBufferPool;
 import com.orientechnologies.common.types.OModifiableBoolean;
 import com.orientechnologies.orient.core.storage.cache.OCachePointer;
 import com.orientechnologies.orient.core.storage.cache.local.OWOWCache;
-import com.orientechnologies.orient.core.storage.cache.OWriteCache;
 import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.ODiskWriteAheadLog;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
@@ -101,7 +100,7 @@ public class WOWCacheTest {
   }
 
   private void initBuffer() throws IOException {
-    wowCache = new OWOWCache(true, pageSize, new OByteBufferPool(pageSize), 10000, writeAheadLog, 10, 100, 100, storageLocal, false,
+    wowCache = new OWOWCache(true, pageSize, new OByteBufferPool(pageSize), writeAheadLog, 10, 100, 100, storageLocal, false,
         files, 1);
     wowCache.loadRegisteredFiles();
   }

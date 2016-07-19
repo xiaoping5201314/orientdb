@@ -272,6 +272,25 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
     }
   }
 
+  @Override
+  public OLogSequenceNumber begin(long segmentId) throws IOException {
+    syncObject.lock();
+    try {
+      checkForClose();
+
+      for (OLogSegment logSegment : logSegments) {
+        if (logSegment.getOrder() == segmentId) {
+          return logSegment.begin();
+        }
+      }
+
+    } finally {
+      syncObject.unlock();
+    }
+
+    return null;
+  }
+
   public OLogSequenceNumber end() {
     syncObject.lock();
     try {
@@ -288,9 +307,9 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
           return null;
       }
 
+      syncObject.unlock();
       return last.end();
     } finally {
-      syncObject.unlock();
     }
   }
 
@@ -729,6 +748,45 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
 
       for (int i = 0; i <= lastTruncateIndex; i++) {
         final OLogSegment logSegment = removeHeadSegmentFromList();
+        if (logSegment != null)
+          logSegment.delete(false);
+      }
+
+      recalculateLogSize();
+      fixMasterRecords();
+    } finally {
+      syncObject.unlock();
+    }
+  }
+
+  public void cutAllSegmentsSmallerThan(long segmentId) throws IOException {
+    syncObject.lock();
+    try {
+      checkForClose();
+      flush();
+
+      final OLogSequenceNumber maxSegmentLSN = preventCutTill;
+
+      if (maxSegmentLSN != null) {
+        if (segmentId > maxSegmentLSN.getSegment()) {
+          segmentId = maxSegmentLSN.getSegment();
+        }
+      }
+
+      int lastTruncateIndex = -1;
+
+      for (int i = 0; i < logSegments.size() - 1; i++) {
+        final OLogSegment logSegment = logSegments.get(i);
+
+        if (logSegment.getOrder() < segmentId)
+          lastTruncateIndex = i;
+        else
+          break;
+      }
+
+      for (int i = 0; i <= lastTruncateIndex; i++) {
+        final OLogSegment logSegment = removeHeadSegmentFromList();
+
         if (logSegment != null)
           logSegment.delete(false);
       }

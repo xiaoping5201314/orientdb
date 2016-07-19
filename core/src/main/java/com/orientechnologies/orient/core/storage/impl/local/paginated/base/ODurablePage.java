@@ -292,6 +292,8 @@ public class ODurablePage {
     buffer.putLong(lsn.getSegment());
     buffer.putLong(lsn.getPosition());
 
+    pointer.setFirstChangedLSN(lsn);
+
     cacheEntry.markDirty();
   }
 }

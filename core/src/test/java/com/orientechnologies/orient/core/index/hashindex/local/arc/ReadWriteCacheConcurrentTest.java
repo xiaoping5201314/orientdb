@@ -8,7 +8,6 @@ import com.orientechnologies.orient.core.Orient;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.storage.cache.OCacheEntry;
 import com.orientechnologies.orient.core.storage.cache.OCachePointer;
-import com.orientechnologies.orient.core.storage.cache.OWriteCache;
 import com.orientechnologies.orient.core.storage.cache.local.twoq.O2QCache;
 import com.orientechnologies.orient.core.storage.cache.local.OWOWCache;
 import com.orientechnologies.orient.core.storage.fs.OFileClassic;
@@ -110,7 +109,7 @@ public class ReadWriteCacheConcurrentTest {
   }
 
   private void initBuffer() throws IOException {
-    writeBuffer = new OWOWCache(false, 8 + systemOffset, new OByteBufferPool(8 + systemOffset), 10000, null, -1,
+    writeBuffer = new OWOWCache(false, 8 + systemOffset, new OByteBufferPool(8 + systemOffset), null, -1,
         15000 * (8 + systemOffset), 4 * (8 + systemOffset) + 15000 * (8 + systemOffset), storageLocal, true, files, 1);
     writeBuffer.loadRegisteredFiles();
     readBuffer = new O2QCache(4 * (8 + systemOffset), 8 + systemOffset, true, 20);

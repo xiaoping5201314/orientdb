@@ -135,6 +135,11 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
+  public OLogSequenceNumber getMinimalNotFlushedLSN() {
+    return new OLogSequenceNumber(0, 0);
+  }
+
+  @Override
   public long bookFileId(String fileName) {
     metadataLock.lock();
     try {
@@ -453,14 +458,6 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
     }
   }
 
-  @Override
-  public void lock() {
-  }
-
-  @Override
-  public void unlock() {
-  }
-
   private static final class MemoryFile {
     private final int id;
     private final int storageId;
@@ -502,7 +499,7 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
           final OByteBufferPool bufferPool = OByteBufferPool.instance();
           final ByteBuffer buffer = bufferPool.acquireDirect(true);
 
-          final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, new OLogSequenceNumber(-1, -1), id, index);
+          final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, id, index);
           cachePointer.incrementReferrer();
 
           cacheEntry = new OCacheEntry(composeFileId(storageId, id), index, cachePointer, false);
@@ -574,16 +571,12 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
-  public void startFuzzyCheckpoints() {
-  }
-
-  @Override
   public boolean checkLowDiskSpace() {
     return true;
   }
 
   @Override
-  public void makeFuzzyCheckpoint() {
+  public void makeFuzzyCheckpoint(long segmentId) {
   }
 
   @Override

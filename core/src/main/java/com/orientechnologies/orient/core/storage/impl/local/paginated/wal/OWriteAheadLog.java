@@ -45,6 +45,8 @@ public interface OWriteAheadLog {
 
   OLogSequenceNumber begin() throws IOException;
 
+  OLogSequenceNumber begin(long segmentId) throws IOException;
+
   OLogSequenceNumber end();
 
   void flush();
@@ -52,8 +54,7 @@ public interface OWriteAheadLog {
   OLogSequenceNumber logAtomicOperationStartRecord(boolean isRollbackSupported, OOperationUnitId unitId) throws IOException;
 
   OLogSequenceNumber logAtomicOperationEndRecord(OOperationUnitId operationUnitId, boolean rollback, OLogSequenceNumber startLsn,
-      Map<String, OAtomicOperationMetadata<?>> atomicOperationMetadata)
-      throws IOException;
+      Map<String, OAtomicOperationMetadata<?>> atomicOperationMetadata) throws IOException;
 
   OLogSequenceNumber log(OWALRecord record) throws IOException;
 
@@ -75,12 +76,26 @@ public interface OWriteAheadLog {
 
   void cutTill(OLogSequenceNumber lsn) throws IOException;
 
+  /**
+   * Removes all segments with id bellow than passed in.
+   * Some segments still may not be removed if call of {@link #preventCutTill(OLogSequenceNumber)}  method
+   * will prohibit to remove log records which are contained by them.
+   *
+   * @param segmentId Segment id
+   */
+  void cutAllSegmentsSmallerThan(long segmentId) throws IOException;
+
   void addFullCheckpointListener(OFullCheckpointRequestListener listener);
 
   void removeFullCheckpointListener(OFullCheckpointRequestListener listener);
 
   void moveLsnAfter(OLogSequenceNumber lsn) throws IOException;
 
+  /**
+   * Prevents of removing from WAL all records with LSN bigger or equals to passed in LSN.
+   *
+   * @param lsn LSN of minimal log record which should be kept in log.
+   */
   void preventCutTill(OLogSequenceNumber lsn) throws IOException;
 
   File[] nonActiveSegments(long fromSegment);

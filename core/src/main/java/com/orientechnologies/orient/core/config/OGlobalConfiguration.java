@@ -123,6 +123,12 @@ public enum OGlobalConfiguration {
   DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL("storage.diskCache.writeCachePageFlushInterval",
       "Interval between flushing of pages from write cache (in ms)", Integer.class, 25),
 
+  DISK_WRITE_CACHE_PAGES_PER_SECOND("storage.diskCache.writeCachePagesPerSecond",
+      "Maximum amount of pages which should be flushed by disk write cache per second, depends on speed of disk drive. "
+          + "The more pages per second will be flushed the less speed of disk read operations."
+          + " For HDD typical value is 50 for SSD it differs from 100 to 1000 depends on access times", Integer.class, 50),
+
+
   DISK_WRITE_CACHE_FLUSH_WRITE_INACTIVITY_INTERVAL("storage.diskCache.writeCacheFlushInactivityInterval",
       "Interval between 2 writes to the disk cache,"
           + " if writes are done with an interval more than provided, all files will be fsynced before the next write,"
@@ -210,9 +216,12 @@ public enum OGlobalConfiguration {
   WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT("storage.wal.fuzzyCheckpointShutdownWait",
       "The amount of time the DB should wait until it shuts down (in seconds)", Integer.class, 60 * 10),
 
+  @Deprecated
   WAL_FULL_CHECKPOINT_SHUTDOWN_TIMEOUT("storage.wal.fullCheckpointShutdownTimeout",
       "The amount of time the DB will wait, until a checkpoint is finished, during a DB shutdown (in seconds)", Integer.class,
       60 * 10),
+
+
 
   WAL_LOCATION("storage.wal.path", "Path to the WAL file on the disk. By default, it is placed in the DB directory, but"
       + " it is highly recommended to use a separate disk to store log operations", String.class, null),

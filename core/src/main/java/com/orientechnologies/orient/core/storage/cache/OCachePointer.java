@@ -22,6 +22,7 @@ package com.orientechnologies.orient.core.storage.cache;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -41,9 +42,8 @@ public class OCachePointer {
   private final AtomicInteger referrersCount         = new AtomicInteger();
   private final AtomicLong    readersWritersReferrer = new AtomicLong();
 
-  private final AtomicInteger usagesCounter = new AtomicInteger();
-
-  private volatile OLogSequenceNumber lastFlushedLsn;
+  private final AtomicInteger                       usagesCounter   = new AtomicInteger();
+  private final AtomicReference<OLogSequenceNumber> firstChangedLSN = new AtomicReference<OLogSequenceNumber>();
 
   private volatile WritersListener writersListener;
 
@@ -67,14 +67,47 @@ public class OCachePointer {
   private final long fileId;
   private final long pageIndex;
 
-  public OCachePointer(final ByteBuffer buffer, final OByteBufferPool bufferPool, final OLogSequenceNumber lastFlushedLsn,
-      final long fileId, final long pageIndex) {
-    this.lastFlushedLsn = lastFlushedLsn;
+  public OCachePointer(final ByteBuffer buffer, final OByteBufferPool bufferPool, final long fileId, final long pageIndex) {
     this.buffer = buffer;
     this.bufferPool = bufferPool;
 
     this.fileId = fileId;
     this.pageIndex = pageIndex;
+  }
+
+  /**
+   * Track the LSN of the first change which is applied to the given page.
+   * If stored LSN is not null and is bigger than passed in LSN nothing will be performed.
+   *
+   * @param lsn LSN of change which currently applied to the page.
+   */
+  public void setFirstChangedLSN(OLogSequenceNumber lsn) {
+    while (true) {
+      final OLogSequenceNumber changedLSN = firstChangedLSN.get();
+      if (changedLSN == null || lsn.compareTo(changedLSN) < 0) {
+        if (firstChangedLSN.compareAndSet(changedLSN, lsn))
+          break;
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * @return LSN of the first change applied to the loaded and not modified page. The LSN is used to flush data from buffer.
+   */
+  public OLogSequenceNumber getFirstChangedLSN() {
+    return firstChangedLSN.get();
+  }
+
+  /**
+   * Clears LSN of first change applied to the loaded page.
+   * Is used only during page flush.
+   *
+   * So page on disk and buffer becomes the same.
+   */
+  public void clearFirstChangedLSN() {
+    firstChangedLSN.set(null);
   }
 
   public void setWritersListener(WritersListener writersListener) {
@@ -87,14 +120,6 @@ public class OCachePointer {
 
   public long getPageIndex() {
     return pageIndex;
-  }
-
-  public OLogSequenceNumber getLastFlushedLsn() {
-    return lastFlushedLsn;
-  }
-
-  public void setLastFlushedLsn(final OLogSequenceNumber lastFlushedLsn) {
-    this.lastFlushedLsn = lastFlushedLsn;
   }
 
   public void incrementReadersReferrer() {

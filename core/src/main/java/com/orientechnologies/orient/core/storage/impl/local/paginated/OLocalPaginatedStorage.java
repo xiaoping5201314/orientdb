@@ -79,8 +79,8 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
   private final OStorageVariableParser     variableParser;
   private final OPaginatedStorageDirtyFlag dirtyFlag;
 
-  private final String          storagePath;
-  private       ExecutorService checkpointExecutor;
+  private final String                   storagePath;
+  private       ScheduledExecutorService fuzzyCheckpointExecutor;
 
   private final OClosableLinkedContainer<Long, OFileClassic> files;
 
@@ -361,10 +361,11 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
   protected void preCloseSteps() throws IOException {
     try {
       if (writeAheadLog != null) {
-        checkpointExecutor.shutdown();
-        if (!checkpointExecutor
-            .awaitTermination(OGlobalConfiguration.WAL_FULL_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS))
-          throw new OStorageException("Cannot terminate full checkpoint task");
+        fuzzyCheckpointExecutor.shutdown();
+
+        if (!fuzzyCheckpointExecutor
+            .awaitTermination(OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS))
+          throw new OStorageException("Cannot terminate fuzzy checkpoint task");
       }
     } catch (InterruptedException e) {
       Thread.interrupted();
@@ -437,7 +438,10 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
 
   protected void initWalAndDiskCache() throws IOException {
     if (configuration.getContextConfiguration().getValueAsBoolean(OGlobalConfiguration.USE_WAL)) {
-      checkpointExecutor = Executors.newSingleThreadExecutor(new FullCheckpointThreadFactory());
+      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
+      fuzzyCheckpointExecutor.scheduleWithFixedDelay(new PeriodicFuzzyCheckpoint(),
+          OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_INTERVAL.getValueAsInteger(),
+          OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_INTERVAL.getValueAsInteger(), TimeUnit.SECONDS);
 
       final ODiskWriteAheadLog diskWriteAheadLog = new ODiskWriteAheadLog(this);
       diskWriteAheadLog.addLowDiskSpaceListener(this);
@@ -452,7 +456,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
         .floor((((double) OGlobalConfiguration.DISK_WRITE_CACHE_PART.getValueAsInteger()) / 100.0) * diskCacheSize);
 
     final OWOWCache wowCache = new OWOWCache(false, OGlobalConfiguration.DISK_CACHE_PAGE_SIZE.getValueAsInteger() * ONE_KB,
-        OByteBufferPool.instance(), OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_TTL.getValueAsLong() * 1000, writeAheadLog,
+        OByteBufferPool.instance(), writeAheadLog,
         OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL.getValueAsInteger(), writeCacheSize, diskCacheSize, this, true,
         files, getId());
     wowCache.loadRegisteredFiles();
@@ -466,12 +470,24 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
     return new File(path + "/" + OMetadataDefault.CLUSTER_INTERNAL_NAME + OPaginatedCluster.DEF_EXTENSION).exists();
   }
 
-  private static class FullCheckpointThreadFactory implements ThreadFactory {
+  private static class FuzzyCheckpointThreadFactory implements ThreadFactory {
     @Override
     public Thread newThread(Runnable r) {
       Thread thread = new Thread(r);
       thread.setDaemon(true);
       return thread;
+    }
+  }
+
+  private class PeriodicFuzzyCheckpoint implements Runnable {
+    @Override
+    public void run() {
+      try {
+        makeFuzzyCheckpoint();
+      } catch (RuntimeException e) {
+        OLogManager.instance().error(this, "Error during fuzzy checkpoint", e);
+      }
+
     }
   }
 }
