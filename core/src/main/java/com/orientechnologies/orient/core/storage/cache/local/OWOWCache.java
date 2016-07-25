@@ -1522,7 +1522,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       }
     }
 
-    private List<OCachePointer> sortPagesByPosition() {
+    private List<OCachePointer> sortPagesByLSN() {
       final List<OCachePointer> pages = new ArrayList<OCachePointer>();
 
       for (OCachePointer page : writeCachePages.values()) {
@@ -1532,24 +1532,19 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       Collections.sort(pages, new Comparator<OCachePointer>() {
         @Override
         public int compare(OCachePointer pageOne, OCachePointer pageTwo) {
-          final long fileIdOne = pageOne.getFileId();
-          final long fileIdTwo = pageTwo.getFileId();
+          OLogSequenceNumber lsnOne = pageOne.getFirstChangedLSN();
+          OLogSequenceNumber lsnTwo = pageTwo.getFirstChangedLSN();
 
-          if (fileIdOne > fileIdTwo)
-            return 1;
-          if (fileIdOne < fileIdTwo)
-            return -1;
+          if (lsnOne == null && lsnTwo == null)
+            return 0;
 
-          final long pageIndexOne = pageOne.getPageIndex();
-          final long pageIndexTwo = pageTwo.getPageIndex();
-
-          if (pageIndexOne > pageIndexTwo)
+          if (lsnOne == null)
             return 1;
 
-          if (pageIndexOne < pageIndexTwo)
+          if (lsnTwo == null)
             return -1;
 
-          return 0;
+          return lsnOne.compareTo(lsnTwo);
         }
       });
 
@@ -1557,7 +1552,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
 
     private void flushWriteCacheFromMinLSN(int amountOfPagesToFlush) throws IOException {
-      final List<OCachePointer> pagesToFlush = sortPagesByPosition();
+      final List<OCachePointer> pagesToFlush = sortPagesByLSN();
 
       final int flushIndex = getIndexWithMinLSN(pagesToFlush);
 
