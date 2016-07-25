@@ -1532,8 +1532,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       Collections.sort(pages, new Comparator<OCachePointer>() {
         @Override
         public int compare(OCachePointer pageOne, OCachePointer pageTwo) {
-          OLogSequenceNumber lsnOne = pageOne.getFirstChangedLSN();
-          OLogSequenceNumber lsnTwo = pageTwo.getFirstChangedLSN();
+          OLogSequenceNumber lsnOne = pageOne.getLsn();
+          OLogSequenceNumber lsnTwo = pageTwo.getLsn();
 
           if (lsnOne == null && lsnTwo == null)
             return 0;
