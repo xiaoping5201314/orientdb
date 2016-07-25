@@ -358,22 +358,6 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
   }
 
   @Override
-  protected void preCloseSteps() throws IOException {
-    try {
-      if (writeAheadLog != null) {
-        fuzzyCheckpointExecutor.shutdown();
-
-        if (!fuzzyCheckpointExecutor
-            .awaitTermination(OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS))
-          throw new OStorageException("Cannot terminate fuzzy checkpoint task");
-      }
-    } catch (InterruptedException e) {
-      Thread.interrupted();
-      throw OException.wrapException(new OStorageException("Error on closing of storage '" + name), e);
-    }
-  }
-
-  @Override
   protected void postDeleteSteps() {
     File dbDir;// GET REAL DIRECTORY
     dbDir = new File(OIOUtils.getPathFromDatabaseName(OSystemVariableResolver.resolveSystemVariables(url)));
