@@ -293,7 +293,6 @@ public class ODurablePage {
     buffer.putLong(lsn.getPosition());
 
     pointer.setFirstChangedLSN(lsn);
-    pointer.setLsn(lsn);
 
     cacheEntry.markDirty();
   }

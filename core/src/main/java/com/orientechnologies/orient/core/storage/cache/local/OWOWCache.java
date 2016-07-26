@@ -1460,17 +1460,36 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   }
 
   private final class PeriodicFlushTask implements Runnable {
-    private long flushCount;
-    private long flushSumTime;
-
     private long chunkCount   = 0;
     private long chunkSizeSum = 0;
+
+    private long flushedPagesSum = 0;
+    private long flushCount      = 0;
+
+    private long reportTime = 0;
 
     @Override
     public void run() {
       final OSessionStoragePerformanceStatistic statistic = performanceStatisticManager.getSessionPerformanceStatistic();
       if (statistic != null)
         statistic.startWriteCacheFlushTimer();
+
+      final long ms = System.currentTimeMillis();
+
+      if (reportTime == 0)
+        reportTime = ms;
+      else if (ms - reportTime > 10000) {
+        reportTime = ms;
+
+        System.out.println("Average chunk size : " + (chunkSizeSum / chunkCount));
+        System.out.println("Average flush in pages : " + (flushedPagesSum / flushCount));
+
+        chunkSizeSum = 0;
+        chunkCount = 0;
+
+        flushedPagesSum = 0;
+        flushCount = 0;
+      }
 
       int flushedPages = 0;
       try {
@@ -1532,19 +1551,24 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       Collections.sort(pages, new Comparator<OCachePointer>() {
         @Override
         public int compare(OCachePointer pageOne, OCachePointer pageTwo) {
-          OLogSequenceNumber lsnOne = pageOne.getLsn();
-          OLogSequenceNumber lsnTwo = pageTwo.getLsn();
+          long fileIdOne = pageOne.getFileId();
+          long fileIdTwo = pageTwo.getFileId();
 
-          if (lsnOne == null && lsnTwo == null)
-            return 0;
-
-          if (lsnOne == null)
+          if (fileIdOne > fileIdTwo)
             return 1;
 
-          if (lsnTwo == null)
+          if (fileIdOne < fileIdTwo)
             return -1;
 
-          return lsnOne.compareTo(lsnTwo);
+          final long pageIndexOne = pageOne.getPageIndex();
+          final long pageIndexTwo = pageTwo.getPageIndex();
+
+          if (pageIndexOne > pageIndexTwo)
+            return 1;
+          if (pageIndexOne < pageIndexTwo)
+            return -1;
+
+          return 0;
         }
       });
 
@@ -1609,10 +1633,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         if (!chunk.isEmpty()) {
           chunkCount++;
           chunkSizeSum += chunk.size();
-
-          if (chunkCount > 0 && chunkCount % 10000 == 0) {
-            System.out.println("Average chunk size is " + (chunkSizeSum / chunkCount));
-          }
 
           boolean flushed = false;
 
@@ -1715,6 +1735,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         }
       }
 
+      flushCount++;
+      flushedPagesSum += flushedPages;
     }
 
     private int getIndexWithMinLSN(List<OCachePointer> pagesToFlush) {

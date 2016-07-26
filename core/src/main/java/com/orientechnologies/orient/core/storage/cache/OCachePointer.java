@@ -47,8 +47,6 @@ public class OCachePointer {
 
   private volatile WritersListener writersListener;
 
-  private volatile OLogSequenceNumber lsn;
-
   private final ByteBuffer      buffer;
   private final OByteBufferPool bufferPool;
 
@@ -93,14 +91,6 @@ public class OCachePointer {
         break;
       }
     }
-  }
-
-  public OLogSequenceNumber getLsn() {
-    return lsn;
-  }
-
-  public void setLsn(OLogSequenceNumber lsn) {
-    this.lsn = lsn;
   }
 
   /**
