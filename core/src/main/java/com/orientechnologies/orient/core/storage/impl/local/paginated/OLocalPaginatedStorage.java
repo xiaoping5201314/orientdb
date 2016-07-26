@@ -21,6 +21,7 @@
 package com.orientechnologies.orient.core.storage.impl.local.paginated;
 
 import com.orientechnologies.common.collection.closabledictionary.OClosableLinkedContainer;
+import com.orientechnologies.common.concur.lock.OInterruptedException;
 import com.orientechnologies.common.directmemory.OByteBufferPool;
 import com.orientechnologies.common.exception.OException;
 import com.orientechnologies.common.io.OFileUtils;
@@ -440,9 +441,8 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
         .floor((((double) OGlobalConfiguration.DISK_WRITE_CACHE_PART.getValueAsInteger()) / 100.0) * diskCacheSize);
 
     final OWOWCache wowCache = new OWOWCache(false, OGlobalConfiguration.DISK_CACHE_PAGE_SIZE.getValueAsInteger() * ONE_KB,
-        OByteBufferPool.instance(), writeAheadLog,
-        OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL.getValueAsInteger(), writeCacheSize, diskCacheSize, this, true,
-        files, getId());
+        OByteBufferPool.instance(), writeAheadLog, OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL.getValueAsInteger(),
+        writeCacheSize, diskCacheSize, this, true, files, getId());
     wowCache.loadRegisteredFiles();
     wowCache.addLowDiskSpaceListener(this);
     wowCache.addBackgroundExceptionListener(this);
@@ -452,6 +452,21 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
 
   public static boolean exists(final String path) {
     return new File(path + "/" + OMetadataDefault.CLUSTER_INTERNAL_NAME + OPaginatedCluster.DEF_EXTENSION).exists();
+  }
+
+  @Override
+  protected void finalizeClose() {
+    if (fuzzyCheckpointExecutor != null) {
+      fuzzyCheckpointExecutor.shutdown();
+      try {
+        if (!fuzzyCheckpointExecutor
+            .awaitTermination(OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS)) {
+          throw new OStorageException("Can not able to terminate fuzzy checkpoint");
+        }
+      } catch (InterruptedException e) {
+        throw OException.wrapException(new OInterruptedException("Thread was interrupted during fuzzy checkpoint termination"), e);
+      }
+    }
   }
 
   private static class FuzzyCheckpointThreadFactory implements ThreadFactory {

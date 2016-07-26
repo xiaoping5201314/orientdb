@@ -3582,6 +3582,11 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       Orient.instance().getProfiler().stopChrono("db." + name + ".close", "Close a database", timer, "db.*.close");
       stateLock.releaseWriteLock();
     }
+
+    finalizeClose();
+  }
+
+  protected void finalizeClose() {
   }
 
   protected void closeClusters(boolean onDelete) throws IOException {
