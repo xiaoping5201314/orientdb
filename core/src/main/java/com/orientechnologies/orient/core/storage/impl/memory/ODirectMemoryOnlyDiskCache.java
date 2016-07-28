@@ -85,6 +85,10 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
+  public void flushTillSegment(long segmentId) throws IOException {
+  }
+
+  @Override
   public long addFile(String fileName, OWriteCache writeCache) {
     metadataLock.lock();
     try {

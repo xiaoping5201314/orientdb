@@ -486,7 +486,6 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
       } catch (RuntimeException e) {
         OLogManager.instance().error(this, "Error during fuzzy checkpoint", e);
       }
-
     }
   }
 }
