@@ -4360,7 +4360,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
         do {
           writeCache.flushTillSegment(flushTillSegmentId);
           minDirtySegment = fetchMinDirtySegment();
-        } while (minDirtySegment > flushTillSegmentId);
+        } while (minDirtySegment < flushTillSegmentId);
 
         writeCache.makeFuzzyCheckpoint(flushTillSegmentId);
 

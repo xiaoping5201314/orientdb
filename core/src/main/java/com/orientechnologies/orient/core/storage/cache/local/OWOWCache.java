@@ -1486,18 +1486,30 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     @Override
     public Void call() throws Exception {
+      OLogSequenceNumber minDirtyLSN = getEarliestDirtyLSN();
+      Map.Entry<OLogSequenceNumber, PageKey> firstEntry;
+
+      while (minDirtyLSN != null && minDirtyLSN.getSegment() > segmentId) {
+        flushWriteCacheFromMinLSN(1);
+
+        firstEntry = pagesByLSN.firstEntry();
+        if (firstEntry != null)
+          minDirtyLSN = firstEntry.getKey();
+        else
+          minDirtyLSN = null;
+      }
+
+      return null;
+    }
+
+    private OLogSequenceNumber getEarliestDirtyLSN() {
       Map.Entry<OLogSequenceNumber, PageKey> firstEntry = pagesByLSN.firstEntry();
       OLogSequenceNumber minDirtyLSN;
       if (firstEntry != null)
         minDirtyLSN = firstEntry.getKey();
       else
         minDirtyLSN = null;
-
-      while (minDirtyLSN != null && minDirtyLSN.getSegment() > segmentId) {
-        flushWriteCacheFromMinLSN(1);
-      }
-
-      return null;
+      return minDirtyLSN;
     }
   }
 

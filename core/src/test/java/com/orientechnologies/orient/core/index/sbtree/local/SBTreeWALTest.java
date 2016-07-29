@@ -330,8 +330,10 @@ public class SBTreeWALTest extends SBTreeTest {
         }
         atomicUnit.clear();
       } else {
-        Assert.assertTrue(walRecord instanceof OUpdatePageRecord || walRecord instanceof ONonTxOperationPerformedWALRecord
-            || walRecord instanceof OFileCreatedWALRecord);
+        Assert.assertTrue(walRecord instanceof OUpdatePageRecord || walRecord instanceof OFileCreatedWALRecord
+            || walRecord instanceof ONonTxOperationPerformedWALRecord || walRecord instanceof OFullCheckpointStartRecord
+            || walRecord instanceof OCheckpointEndRecord || walRecord instanceof OFuzzyCheckpointEndRecord ||
+            walRecord instanceof OFuzzyCheckpointStartRecord);
       }
 
       lsn = log.next(lsn);
