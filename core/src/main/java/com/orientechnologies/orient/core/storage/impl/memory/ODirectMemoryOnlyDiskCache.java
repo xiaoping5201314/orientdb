@@ -85,7 +85,7 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
-  public void flushTillSegment(long segmentId) throws IOException {
+  public void flushTillSegment(long segmentId) {
   }
 
   @Override

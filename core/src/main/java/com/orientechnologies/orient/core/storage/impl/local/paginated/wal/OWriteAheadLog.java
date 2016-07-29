@@ -100,6 +100,8 @@ public interface OWriteAheadLog {
 
   File[] nonActiveSegments(long fromSegment);
 
+  long[] nonActiveSegments();
+
   long activeSegment();
 
   void newSegment() throws IOException;

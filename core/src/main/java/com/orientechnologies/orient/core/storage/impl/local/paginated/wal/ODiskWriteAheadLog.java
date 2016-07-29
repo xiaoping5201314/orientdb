@@ -567,6 +567,26 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
     return files;
   }
 
+  @Override
+  public long[] nonActiveSegments() {
+    final long[] result;
+
+    syncObject.lock();
+    try {
+      result = new long[logSegments.size()];
+
+      for (int i = 0; i < logSegments.size() - 1; i++) {
+        final OLogSegment logSegment = logSegments.get(i);
+        result[i] = logSegment.getOrder();
+
+      }
+    } finally {
+      syncObject.unlock();
+    }
+
+    return result;
+  }
+
   public long size() {
     return logSize;
   }

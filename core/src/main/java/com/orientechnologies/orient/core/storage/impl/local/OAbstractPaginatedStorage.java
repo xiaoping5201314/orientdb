@@ -21,6 +21,7 @@
 package com.orientechnologies.orient.core.storage.impl.local;
 
 import com.orientechnologies.common.concur.lock.OComparableLockManager;
+import com.orientechnologies.common.concur.lock.OInterruptedException;
 import com.orientechnologies.common.concur.lock.OModificationOperationProhibitedException;
 import com.orientechnologies.common.concur.lock.OPartitionedLockManager;
 import com.orientechnologies.common.exception.OException;
@@ -88,7 +89,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.Callable;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -121,6 +122,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   private volatile ThreadLocal<OStorageTransaction> transaction          = new ThreadLocal<OStorageTransaction>();
   private final    AtomicBoolean                    checkpointInProgress = new AtomicBoolean();
+  private final    AtomicBoolean                    walVacuumInProgress  = new AtomicBoolean();
+
   protected final OSBTreeCollectionManagerShared sbTreeCollectionManager;
 
   private final OPerformanceStatisticManager performanceStatisticManager = new OPerformanceStatisticManager(this,
@@ -140,7 +143,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   protected volatile OAtomicOperationsManager atomicOperationsManager;
   private volatile boolean                  wereNonTxOperationsPerformedInPreviousOpen = false;
   private volatile OLowDiskSpaceInformation lowDiskSpace                               = null;
-  private volatile boolean                  checkpointRequest                          = false;
 
   private volatile Exception dataFlushException = null;
 
@@ -151,6 +153,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   private boolean                   wereDataRestoredAfterOpen = false;
 
   private volatile long fullCheckpointCount;
+
+  protected volatile ScheduledExecutorService fuzzyCheckpointExecutor;
 
   public OAbstractPaginatedStorage(String name, String filePath, String mode, int id) {
     super(name, filePath, mode, OGlobalConfiguration.STORAGE_LOCK_TIMEOUT.getValueAsInteger());
@@ -190,6 +194,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (!exists())
         throw new OStorageException("Cannot open the storage '" + name + "' because it does not exist in path: " + url);
 
+      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
       configuration.load(iProperties);
 
       final String cs = configuration.getConflictStrategy();
@@ -328,6 +333,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
       if (exists())
         throw new OStorageExistsException("Cannot create new storage '" + getURL() + "' because it already exists");
+
+      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
 
       if (!configuration.getContextConfiguration().getContextKeys()
           .contains(OGlobalConfiguration.STORAGE_COMPRESSION_METHOD.getKey())) {
@@ -512,7 +519,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   public int addCluster(String clusterName, boolean forceListBased, final Object... parameters) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     stateLock.acquireWriteLock();
     try {
@@ -530,7 +537,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   public int addCluster(String clusterName, int requestedId, boolean forceListBased, Object... parameters) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
     stateLock.acquireWriteLock();
     try {
       checkOpeness();
@@ -556,7 +563,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   public boolean dropCluster(final int clusterId, final boolean iTruncate) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     stateLock.acquireWriteLock();
     try {
@@ -914,7 +921,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   public OStorageOperationResult<OPhysicalPosition> createRecord(final ORecordId rid, final byte[] content, final int recordVersion,
       final byte recordType, final int mode, final ORecordCallback<Long> callback) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final OPhysicalPosition ppos = new OPhysicalPosition(recordType);
     final OCluster cluster = getClusterById(rid.clusterId);
@@ -1058,7 +1065,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   public OStorageOperationResult<Integer> updateRecord(final ORecordId rid, final boolean updateContent, final byte[] content,
       final int version, final byte recordType, final int mode, final ORecordCallback<Integer> callback) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final OCluster cluster = getClusterById(rid.clusterId);
     if (transaction.get() != null) {
@@ -1094,7 +1101,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   public OStorageOperationResult<Integer> recyclePosition(final ORecordId rid, final byte[] content, final int version,
       final byte recordType) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final OCluster cluster = getClusterById(rid.clusterId);
     if (transaction.get() != null) {
@@ -1143,7 +1150,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   public OStorageOperationResult<Boolean> deleteRecord(final ORecordId rid, final int version, final int mode,
       ORecordCallback<Boolean> callback) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final OCluster cluster = getClusterById(rid.clusterId);
 
@@ -1174,7 +1181,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   @Override
   public OStorageOperationResult<Boolean> hideRecord(final ORecordId rid, final int mode, ORecordCallback<Boolean> callback) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final OCluster cluster = getClusterById(rid.clusterId);
 
@@ -1290,7 +1297,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   public List<ORecordOperation> commit(final OTransaction clientTx, Runnable callback) {
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
     final ODatabaseDocumentInternal databaseRecord = (ODatabaseDocumentInternal) clientTx.getDatabase();
     final OIndexManagerProxy indexManager = databaseRecord.getMetadata().getIndexManager();
@@ -1453,7 +1460,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
   public OUncompletedCommit<List<ORecordOperation>> initiateCommit(OTransaction clientTx, Runnable callback) {
     boolean success = false;
     checkOpeness();
-    checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+    checkLowDiskSpaceAndBackgroundDataFlushExceptions();
     final ODatabaseDocumentInternal databaseRecord = (ODatabaseDocumentInternal) clientTx.getDatabase();
     final OIndexManagerProxy indexManager = databaseRecord.getMetadata().getIndexManager();
     final TreeMap<String, OTransactionIndexChanges> indexesToCommit = getSortedIndexEntries(clientTx);
@@ -1624,7 +1631,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       // this method introduced for binary compatibility only
       if (configuration.binaryFormatVersion > 15)
@@ -1674,7 +1681,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       final String originalName = engineName;
       engineName = engineName.toLowerCase(configuration.getLocaleInstance());
@@ -1764,7 +1771,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       checkIndexId(indexId);
 
@@ -1826,7 +1833,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       return doRemoveKeyFromIndex(indexId, key);
     } finally {
@@ -1859,7 +1866,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       doClearIndex(indexId);
     } finally {
@@ -1920,7 +1927,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     stateLock.acquireReadLock();
     try {
       checkOpeness();
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       doUpdateIndexEntry(indexId, key, valueCreator);
     } finally {
@@ -2019,7 +2026,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     try {
       checkOpeness();
 
-      checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions();
+      checkLowDiskSpaceAndBackgroundDataFlushExceptions();
 
       doPutIndexValue(indexId, key, value);
     } finally {
@@ -2587,7 +2594,9 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
 
   @Override
   public void requestCheckpoint() {
-    checkpointRequest = true;
+    if (!walVacuumInProgress.get() && walVacuumInProgress.compareAndSet(false, true)) {
+      fuzzyCheckpointExecutor.submit(new WALVacuum());
+    }
   }
 
   /**
@@ -3583,10 +3592,17 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       stateLock.releaseWriteLock();
     }
 
-    finalizeClose();
-  }
-
-  protected void finalizeClose() {
+    if (fuzzyCheckpointExecutor != null) {
+      fuzzyCheckpointExecutor.shutdown();
+      try {
+        if (!fuzzyCheckpointExecutor
+            .awaitTermination(OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS)) {
+          throw new OStorageException("Can not able to terminate fuzzy checkpoint");
+        }
+      } catch (InterruptedException e) {
+        throw OException.wrapException(new OInterruptedException("Thread was interrupted during fuzzy checkpoint termination"), e);
+      }
+    }
   }
 
   protected void closeClusters(boolean onDelete) throws IOException {
@@ -4128,7 +4144,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (status != STATUS.OPEN || writeAheadLog == null)
         return;
 
-      final long fuzzySegment = fetchMinDirtyLSN();
+      final long fuzzySegment = fetchMinDirtySegment();
       writeCache.makeFuzzyCheckpoint(fuzzySegment);
 
     } catch (IOException ioe) {
@@ -4138,7 +4154,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     }
   }
 
-  private void checkLowDiskSpaceFullCheckpointRequestsAndBackgroundDataFlushExceptions() {
+  private void checkLowDiskSpaceAndBackgroundDataFlushExceptions() {
     if (transaction.get() != null)
       return;
 
@@ -4170,24 +4186,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       }
     }
 
-    if (checkpointRequest && writeAheadLog instanceof ODiskWriteAheadLog) {
-      if (checkpointInProgress.compareAndSet(false, true)) {
-        try {
-          final ODiskWriteAheadLog diskWriteAheadLog = (ODiskWriteAheadLog) writeAheadLog;
-          final long size = diskWriteAheadLog.size();
-
-          makeFuzzyCheckpoint();
-
-          if (size <= diskWriteAheadLog.size())
-            synch();
-
-          checkpointRequest = false;
-        } finally {
-          checkpointInProgress.set(false);
-        }
-      }
-    }
-
     if (dataFlushException != null) {
       throw OException.wrapException(new OStorageException(
               "Error in data flush background thread, please restart database and send full stack trace inside of bug report"),
@@ -4195,7 +4193,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     }
   }
 
-  private long fetchMinDirtyLSN() {
+  private long fetchMinDirtySegment() {
     long fuzzySegment;
     OLogSequenceNumber minLSN;
 
@@ -4330,4 +4328,49 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     }
   }
 
+  private static class FuzzyCheckpointThreadFactory implements ThreadFactory {
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r);
+      thread.setDaemon(true);
+      return thread;
+    }
+  }
+
+  private final class WALVacuum implements Runnable {
+    @Override
+    public void run() {
+      stateLock.acquireReadLock();
+      try {
+        if (status == STATUS.CLOSED)
+          return;
+
+        final long[] nonActiveSegments = writeAheadLog.nonActiveSegments();
+        if (nonActiveSegments.length == 0)
+          return;
+
+        long flushTillSegmentId;
+        if (nonActiveSegments.length == 1) {
+          flushTillSegmentId = writeAheadLog.activeSegment();
+        } else {
+          flushTillSegmentId = (nonActiveSegments[0] + nonActiveSegments[nonActiveSegments.length - 1]) / 2;
+        }
+
+        long minDirtySegment;
+        do {
+          writeCache.flushTillSegment(flushTillSegmentId);
+          minDirtySegment = fetchMinDirtySegment();
+        } while (minDirtySegment > flushTillSegmentId);
+
+        writeCache.makeFuzzyCheckpoint(flushTillSegmentId);
+
+      } catch (Exception e) {
+        dataFlushException = e;
+        OLogManager.instance().error(this, "Error during flushing of data for fuzzy checkpoint", e);
+      } finally {
+        stateLock.releaseReadLock();
+        walVacuumInProgress.set(false);
+      }
+    }
+  }
 }

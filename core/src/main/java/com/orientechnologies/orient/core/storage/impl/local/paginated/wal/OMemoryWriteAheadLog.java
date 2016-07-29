@@ -134,6 +134,11 @@ public class OMemoryWriteAheadLog extends OAbstractWriteAheadLog {
   }
 
   @Override
+  public long[] nonActiveSegments() {
+    return new long[0];
+  }
+
+  @Override
   public long activeSegment() {
     return 0;
   }

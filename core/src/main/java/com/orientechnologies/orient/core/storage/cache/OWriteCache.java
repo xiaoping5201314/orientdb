@@ -164,4 +164,6 @@ public interface OWriteCache {
   OLogSequenceNumber getMinimalNotFlushedLSN();
 
   OPerformanceStatisticManager getPerformanceStatisticManager();
+
+  void flushTillSegment(long segmentId);
 }

@@ -81,7 +81,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
   private final OPaginatedStorageDirtyFlag dirtyFlag;
 
   private final String                   storagePath;
-  private       ScheduledExecutorService fuzzyCheckpointExecutor;
+
 
   private final OClosableLinkedContainer<Long, OFileClassic> files;
 
@@ -423,7 +423,6 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
 
   protected void initWalAndDiskCache() throws IOException {
     if (configuration.getContextConfiguration().getValueAsBoolean(OGlobalConfiguration.USE_WAL)) {
-      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
       fuzzyCheckpointExecutor.scheduleWithFixedDelay(new PeriodicFuzzyCheckpoint(),
           OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_INTERVAL.getValueAsInteger(),
           OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_INTERVAL.getValueAsInteger(), TimeUnit.SECONDS);
@@ -454,30 +453,6 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
     return new File(path + "/" + OMetadataDefault.CLUSTER_INTERNAL_NAME + OPaginatedCluster.DEF_EXTENSION).exists();
   }
 
-  @Override
-  protected void finalizeClose() {
-    if (fuzzyCheckpointExecutor != null) {
-      fuzzyCheckpointExecutor.shutdown();
-      try {
-        if (!fuzzyCheckpointExecutor
-            .awaitTermination(OGlobalConfiguration.WAL_FUZZY_CHECKPOINT_SHUTDOWN_TIMEOUT.getValueAsInteger(), TimeUnit.SECONDS)) {
-          throw new OStorageException("Can not able to terminate fuzzy checkpoint");
-        }
-      } catch (InterruptedException e) {
-        throw OException.wrapException(new OInterruptedException("Thread was interrupted during fuzzy checkpoint termination"), e);
-      }
-    }
-  }
-
-  private static class FuzzyCheckpointThreadFactory implements ThreadFactory {
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread thread = new Thread(r);
-      thread.setDaemon(true);
-      return thread;
-    }
-  }
-
   private class PeriodicFuzzyCheckpoint implements Runnable {
     @Override
     public void run() {
@@ -488,4 +463,5 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
       }
     }
   }
+
 }
