@@ -1533,6 +1533,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         if (flushCount != 0)
           System.out.println("Average flush in pages : " + (flushedPagesSum / flushCount));
 
+        Map.Entry<OLogSequenceNumber, PageKey> minEntry = pagesByLSN.firstEntry();
+        if (minEntry != null)
+          System.out.println("MIN dirty lsn " + minEntry.getKey());
+        else
+          System.out.println("Min dirty lsn is null");
+
         chunkSizeSum = 0;
         chunkCount = 0;
 
