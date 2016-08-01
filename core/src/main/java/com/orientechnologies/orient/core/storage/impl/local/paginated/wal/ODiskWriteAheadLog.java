@@ -52,7 +52,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
   public static final  String WAL_SEGMENT_EXTENSION   = ".wal";
   private static final long   ONE_KB                  = 1024L;
 
-  private final long freeSpaceHardLimit = OGlobalConfiguration.DISK_CACHE_FREE_SPACE_LIMIT.getValueAsLong() * ONE_KB * ONE_KB;
+  private final long freeSpaceHardLimit = OGlobalConfiguration.WAL_MAX_SIZE.getValueAsLong() * ONE_KB * ONE_KB;
 
   private volatile long freeSpaceLimit = freeSpaceHardLimit;
   private volatile long freeSpace      = -1;
