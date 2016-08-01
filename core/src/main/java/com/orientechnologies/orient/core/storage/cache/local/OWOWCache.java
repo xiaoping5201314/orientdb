@@ -1527,8 +1527,11 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       else if (ms - reportTime > 10000) {
         reportTime = ms;
 
-        System.out.println("Average chunk size : " + (chunkSizeSum / chunkCount));
-        System.out.println("Average flush in pages : " + (flushedPagesSum / flushCount));
+        if (chunkCount != 0)
+          System.out.println("Average chunk size : " + (chunkSizeSum / chunkCount));
+
+        if (flushCount != 0)
+          System.out.println("Average flush in pages : " + (flushedPagesSum / flushCount));
 
         chunkSizeSum = 0;
         chunkCount = 0;
