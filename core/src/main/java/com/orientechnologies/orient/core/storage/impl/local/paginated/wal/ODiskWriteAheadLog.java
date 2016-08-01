@@ -52,11 +52,8 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
   public static final  String WAL_SEGMENT_EXTENSION   = ".wal";
   private static final long   ONE_KB                  = 1024L;
 
-  private final long walSizeHardLimit = OGlobalConfiguration.WAL_MAX_SIZE.getValueAsLong() * ONE_KB * ONE_KB;
-
-  private final    long freeSpaceLimit = OGlobalConfiguration.DISK_CACHE_FREE_SPACE_LIMIT.getValueAsLong() * ONE_KB * ONE_KB;
-  private volatile long freeSpace      = -1;
-  private          long walSizeLimit   = OGlobalConfiguration.WAL_MAX_SIZE.getValueAsLong() * ONE_KB * ONE_KB;
+  private final long freeSpaceLimit = OGlobalConfiguration.DISK_CACHE_FREE_SPACE_LIMIT.getValueAsLong() * ONE_KB * ONE_KB;
+  private       long walSizeLimit   = OGlobalConfiguration.WAL_MAX_SIZE.getValueAsLong() * ONE_KB * ONE_KB;
 
   private final List<OLogSegment> logSegments = new ArrayList<OLogSegment>();
   private final int              maxPagesCacheSize;
@@ -460,10 +457,6 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
           segmentCreationFlag = false;
           segmentCreationComplete.signalAll();
         }
-      }
-
-      if (walSizeHardLimit <= 0 && freeSpace != -1) {
-        walSizeLimit = (logSize + freeSpace) / 2;
       }
 
       if (logSize > walSizeLimit && logSegments.size() > 1) {
@@ -964,7 +957,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
   }
 
   public void checkFreeSpace() {
-    freeSpace = walLocation.getFreeSpace();
+    long freeSpace = walLocation.getFreeSpace();
 
     if (freeSpace < freeSpaceLimit) {
       for (WeakReference<OLowDiskSpaceListener> listenerWeakReference : lowDiskSpaceListeners) {
