@@ -193,8 +193,8 @@ public enum OGlobalConfiguration {
   WAL_MAX_SEGMENT_SIZE("storage.wal.maxSegmentSize", "Maximum size of single WAL segment (in megabytes)", Integer.class, 128),
 
   WAL_MAX_SIZE("storage.wal.maxSize",
-      "Maximum size of WAL on disk (in megabytes), -1 (default) means that WAL may occupy half of the disk space", Integer.class,
-      -1),
+      "Maximum size of WAL on disk (in megabytes), -1 means that WAL may occupy half of the disk space", Integer.class,
+      8192),
 
   WAL_COMMIT_TIMEOUT("storage.wal.commitTimeout", "Maximum interval between WAL commits (in ms.)", Integer.class, 1000),
 
