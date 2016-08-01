@@ -1489,7 +1489,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       OLogSequenceNumber minDirtyLSN = getEarliestDirtyLSN();
       Map.Entry<OLogSequenceNumber, PageKey> firstEntry;
 
-      while (minDirtyLSN != null && minDirtyLSN.getSegment() > segmentId) {
+      while (minDirtyLSN != null && minDirtyLSN.getSegment() < segmentId) {
         flushWriteCacheFromMinLSN(1);
 
         firstEntry = pagesByLSN.firstEntry();
