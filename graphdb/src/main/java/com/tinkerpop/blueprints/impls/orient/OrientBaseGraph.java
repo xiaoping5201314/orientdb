@@ -920,8 +920,7 @@ public abstract class OrientBaseGraph extends OrientConfigurableGraph implements
   /**
    * Get all the Edges in Graph specifying if consider or not sub-classes of E.
    *
-   * @param iPolymorphic
-   *          If true then get all the edge of any sub-class
+   * @param iPolymorphic If true then get all the edge of any sub-class
    * @return Edges as Iterable
    */
   public Iterable<Edge> getEdges(final boolean iPolymorphic) {

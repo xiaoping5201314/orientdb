@@ -55,7 +55,7 @@ import java.nio.ByteBuffer;
  * @author Andrey Lomakin
  * @since 16.08.13
  */
-public abstract class ODurablePage {
+public class ODurablePage {
 
   private static final int MAGIC_NUMBER_OFFSET = 0;
   private static final int CRC32_OFFSET        = MAGIC_NUMBER_OFFSET + OLongSerializer.LONG_SIZE;
