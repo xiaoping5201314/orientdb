@@ -33,6 +33,7 @@ import com.orientechnologies.orient.core.intent.OIntent;
 import com.orientechnologies.orient.core.metadata.OMetadata;
 import com.orientechnologies.orient.core.metadata.security.OSecurityUser;
 import com.orientechnologies.orient.core.query.OQuery;
+import com.orientechnologies.orient.core.sql.executor.OTodoResultSet;
 import com.orientechnologies.orient.core.storage.ORecordCallback;
 import com.orientechnologies.orient.core.storage.ORecordMetadata;
 import com.orientechnologies.orient.core.storage.OStorage;
@@ -76,6 +77,7 @@ public interface ODatabase<T> extends OBackupable, Closeable {
    * @param iUserPassword Password associated to the user
    * @return The Database instance itself giving a "fluent interface". Useful to call multiple methods in chain.
    */
+  @Deprecated
   <DB extends ODatabase> DB open(final String iUserName, final String iUserPassword);
 
   /**
@@ -83,6 +85,7 @@ public interface ODatabase<T> extends OBackupable, Closeable {
    *
    * @return The Database instance itself giving a "fluent interface". Useful to call multiple methods in chain.
    */
+  @Deprecated
   <DB extends ODatabase> DB create();
 
   /**
@@ -94,6 +97,7 @@ public interface ODatabase<T> extends OBackupable, Closeable {
    *
    * @return he Database instance itself giving a "fluent interface". Useful to call multiple methods in chain.
    */
+  @Deprecated
   <DB extends ODatabase> DB create(String incrementalBackupPath);
 
   /**
@@ -101,6 +105,7 @@ public interface ODatabase<T> extends OBackupable, Closeable {
    *
    * @return The Database instance itself giving a "fluent interface". Useful to call multiple methods in chain.
    */
+  @Deprecated
   <DB extends ODatabase> DB create(Map<OGlobalConfiguration, Object> iInitialSettings);
 
   /**
@@ -727,6 +732,15 @@ public interface ODatabase<T> extends OBackupable, Closeable {
    * @return List of POJOs
    */
   <RET extends List<?>> RET query(final OQuery<?> iCommand, final Object... iArgs);
+  
+  /**
+   * Experimental
+   * 
+   * @param query
+   * @param args
+   * @return
+   */
+  public OTodoResultSet query(String query, Object... args);
 
   /**
    * Execute a command against the database. A command can be a SQL statement or a Procedure. If the OStorage used is remote

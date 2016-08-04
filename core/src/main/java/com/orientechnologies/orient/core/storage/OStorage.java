@@ -22,20 +22,22 @@ package com.orientechnologies.orient.core.storage;
 import com.orientechnologies.common.concur.resource.OSharedContainer;
 import com.orientechnologies.orient.core.OUncompletedCommit;
 import com.orientechnologies.orient.core.command.OCommandRequestText;
+import com.orientechnologies.orient.core.config.OContextConfiguration;
 import com.orientechnologies.orient.core.config.OStorageConfiguration;
 import com.orientechnologies.orient.core.conflict.ORecordConflictStrategy;
+import com.orientechnologies.orient.core.db.ODatabase;
 import com.orientechnologies.orient.core.db.record.OCurrentStorageComponentsFactory;
 import com.orientechnologies.orient.core.db.record.ORecordOperation;
 import com.orientechnologies.orient.core.db.record.ridbag.sbtree.OSBTreeCollectionManager;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.sql.executor.OTodoResultSet;
 import com.orientechnologies.orient.core.tx.OTransaction;
 import com.orientechnologies.orient.core.util.OBackupable;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -48,6 +50,10 @@ import java.util.concurrent.Callable;
 
 public interface OStorage extends OBackupable, OSharedContainer {
   String CLUSTER_DEFAULT_NAME = "default";
+
+  default OTodoResultSet query(ODatabase db, String query, Object[] args){
+    throw new UnsupportedOperationException();
+  }
 
   enum SIZE {
     TINY, MEDIUM, LARGE, HUGE
@@ -65,9 +71,9 @@ public interface OStorage extends OBackupable, OSharedContainer {
     @Deprecated KEEP_EXCLUSIVE_LOCK
   }
 
-  void open(String iUserName, String iUserPassword, final Map<String, Object> iProperties);
+  void open(String iUserName, String iUserPassword, final OContextConfiguration contextConfiguration);
 
-  void create(Map<String, Object> iProperties);
+  void create(OContextConfiguration contextConfiguration);
 
   boolean exists();
 

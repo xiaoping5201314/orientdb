@@ -20,6 +20,7 @@
 package com.orientechnologies.orient.graph.stresstest;
 
 import com.orientechnologies.common.util.OCallable;
+import com.orientechnologies.orient.client.remote.OStorageRemote;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.metadata.schema.OType;
@@ -53,7 +54,7 @@ public class OGraphShortestPathWorkload extends OBaseGraphWorkload {
   private final List<ORID> startingVertices     = new ArrayList<ORID>(limit > -1 ? limit : 1000);
 
   public OGraphShortestPathWorkload() {
-    super(false);
+    connectionStrategy = OStorageRemote.CONNECTION_STRATEGY.ROUND_ROBIN_REQUEST;
   }
 
   @Override
@@ -146,7 +147,7 @@ public class OGraphShortestPathWorkload extends OBaseGraphWorkload {
     buffer.append(String.format("- Executed %d shortest paths in %.3f secs", result.current.get(), result.totalTime / 1000f));
     buffer.append(String.format("\n- Path depth: maximum %d, average %.3f, not connected %d", maxDepth.get(),
         totalDepth.get() / (float) startingVertices.size() / (float) startingVertices.size(), notConnected.get()));
-    buffer.append(result.toOutput(2));
+    buffer.append(result.toOutput(1));
 
     return buffer.toString();
   }

@@ -86,7 +86,7 @@ public enum OGlobalConfiguration {
   /**
    * Limit of amount of files which may be open simultaneously
    */
-  OPEN_FILES_LIMIT("storage.openFiles.limit", "Limit of amount of files which may be open simultaneously", Integer.class, 1024),
+  OPEN_FILES_LIMIT("storage.openFiles.limit", "Limit of amount of files which may be open simultaneously", Integer.class, 512),
 
   /**
    * Amount of cached locks is used for component lock in atomic operation to avoid constant creation of new lock instances, default
@@ -613,10 +613,13 @@ public enum OGlobalConfiguration {
       Long.class, 3000l, true),
 
   DISTRIBUTED_COMMAND_TASK_SYNCH_TIMEOUT("distributed.commandTaskTimeout",
-      "Maximum timeout (in ms) to wait for Command remote tasks", Long.class, 1000l, true),
+      "Maximum timeout (in ms) to wait for command distributed tasks", Long.class, 2 * 60 * 1000l, true),
+
+  DISTRIBUTED_COMMAND_QUICK_TASK_SYNCH_TIMEOUT("distributed.commandQuickTaskTimeout",
+      "Maximum timeout (in ms) to wait for quick command distributed tasks", Long.class, 5 * 1000l, true),
 
   DISTRIBUTED_COMMAND_LONG_TASK_SYNCH_TIMEOUT("distributed.commandLongTaskTimeout",
-      "Maximum timeout (in ms) to wait for Long-running remote tasks", Long.class, 24 * 60 * 60 * 1000, true),
+      "Maximum timeout (in ms) to wait for Long-running distributed tasks", Long.class, 24 * 60 * 60 * 1000, true),
 
   DISTRIBUTED_DEPLOYDB_TASK_SYNCH_TIMEOUT("distributed.deployDbTaskTimeout",
       "Maximum timeout (in ms) to wait for database deployment", Long.class, 1200000l, true),
@@ -638,6 +641,34 @@ public enum OGlobalConfiguration {
   DISTRIBUTED_PURGE_RESPONSES_TIMER_DELAY("distributed.purgeResponsesTimerDelay",
       "Maximum timeout (in ms) to collect all the asynchronous responses from replication. This is the delay the purge thread uses to check asynchronous requests in timeout",
       Long.class, 15000l),
+
+  DISTRIBUTED_TX_EXPIRE_TIMEOUT("distributed.txAliveTimeout", "Maximum timeout (in ms) a distributed transaction can be alive. This timeout is to rollback pending transactions after a while",
+      Long.class, 30000l, true),
+
+  /**
+   * @Since 2.2.6
+   */
+  DISTRIBUTED_REQUEST_CHANNELS("distributed.requestChannels", "Number of network channels used to send requests", Integer.class, 1),
+
+  /**
+   * @Since 2.2.6
+   */
+  DISTRIBUTED_RESPONSE_CHANNELS("distributed.responseChannels", "Number of network channels used to send responses", Integer.class, 1),
+
+  /**
+   * @Since 2.2.5
+   */
+  DISTRIBUTED_HEARTBEAT_TIMEOUT("distributed.heartbeatTimeout", "Maximum time in ms to wait for the heartbeat. If the server does not respond in time, it is put offline", Long.class, 10000l),
+
+  /**
+   * @Since 2.2.5
+   */
+  DISTRIBUTED_CHECK_HEALTH_CAN_OFFLINE_SERVER("distributed.checkHealthCanOfflineServer", "In case a server does not respond to the heartbeat message, it is set offline", Boolean.class, false),
+
+  /**
+   * @Since 2.2.5
+   */
+  DISTRIBUTED_CHECK_HEALTH_EVERY("distributed.checkHealthEvery", "Time in ms to check the cluster health. Set to 0 to disable it", Long.class, 10000l),
 
   /**
    * Since 2.2.4
@@ -687,6 +718,11 @@ public enum OGlobalConfiguration {
       Integer.class, 10, true),
 
   /**
+   * @Since 2.2.7
+   */
+  @OApi(maturity = OApi.MATURITY.NEW) DISTRIBUTED_ATOMIC_LOCK_TIMEOUT("distributed.atomicLockTimeout", "Timeout (in ms) to acquire a distributed lock on a record. (0=infinite)", Integer.class, 500, true),
+
+  /**
    * @Since 2.1
    */
   @OApi(maturity = OApi.MATURITY.NEW)DISTRIBUTED_CONCURRENT_TX_AUTORETRY_DELAY("distributed.concurrentTxAutoRetryDelay",
@@ -714,6 +750,9 @@ public enum OGlobalConfiguration {
   @OApi(maturity = OApi.MATURITY.NEW)CLIENT_KRB5_KTNAME("client.krb5.ktname", "Location of the Kerberos client keytab",
       String.class, null),
 
+  @OApi(maturity = OApi.MATURITY.NEW)CLIENT_CONNECTION_STRATEGY("client.connection.strategy", "Strategy used for open connections from a client in case of multiple servers, possible options:STICKY, ROUND_ROBIN_CONNECT, ROUND_ROBIN_REQUEST",
+      String.class, null),
+  
   /**
    * @Since 2.2
    */

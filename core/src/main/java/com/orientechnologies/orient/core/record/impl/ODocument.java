@@ -227,8 +227,9 @@ public class ODocument extends ORecordAbstract
         unTrack((ORID) value);
         track((OIdentifiable) newValue);
         value = newValue;
-        ORecordInternal.setDirtyManager((ORecord) value, this.getDirtyManager());
-
+        if(isTrackingChanges()) {
+          ORecordInternal.setDirtyManager((ORecord) value, this.getDirtyManager());
+        }
         ODocumentEntry entry = _fields.get(iFieldName);
         removeCollectionChangeListener(entry, entry.value);
         entry.value = value;
@@ -927,6 +928,40 @@ public class ODocument extends ORecordAbstract
     return names.toArray(new String[names.size()]);
   }
 
+  public Set<String> getPropertyNames() {
+    checkForLoading();
+
+    if (_status == ORecordElement.STATUS.LOADED && _source != null && ODatabaseRecordThreadLocal.INSTANCE.isDefined()
+        && !ODatabaseRecordThreadLocal.INSTANCE.get().isClosed()) {
+      // DESERIALIZE FIELD NAMES ONLY (SUPPORTED ONLY BY BINARY SERIALIZER)
+      final String[] fieldNames = _recordFormat.getFieldNames(_source);
+      if (fieldNames != null) {
+        return arrayToSet(fieldNames);
+      }
+    }
+
+    checkForFields();
+
+    if (_fields == null || _fields.size() == 0)
+      return Collections.EMPTY_SET;
+    final List<String> names = new ArrayList<String>(_fields.size());
+    for (Entry<String, ODocumentEntry> entry : _fields.entrySet()) {
+      if (entry.getValue().exist())
+        names.add(entry.getKey());
+    }
+    Set<String> result = new HashSet<>();
+    result.addAll(names);
+    return result;
+  }
+
+  private Set<String> arrayToSet(String[] fieldNames) {
+    Set<String> result = new HashSet<>();
+    for (String s : fieldNames) {
+      result.add(s);
+    }
+    return result;
+  }
+
   /**
    * Returns the array of field values.
    */
@@ -1006,8 +1041,9 @@ public class ODocument extends ORecordAbstract
         unTrack((ORID) value);
         track((OIdentifiable) newValue);
         value = newValue;
-        ORecordInternal.setDirtyManager((ORecord) value, this.getDirtyManager());
-
+        if(this.isTrackingChanges()) {
+          ORecordInternal.setDirtyManager((ORecord) value, this.getDirtyManager());
+        }
         if (!iFieldName.contains(".")) {
           ODocumentEntry entry = _fields.get(iFieldName);
           removeCollectionChangeListener(entry, entry.value);
@@ -1122,9 +1158,9 @@ public class ODocument extends ORecordAbstract
    *
    * @since 2.0
    */
-  public ODocument fromMap(final Map<String, Object> iMap) {
+  public ODocument fromMap(final Map<String, ? extends Object> iMap) {
     if (iMap != null) {
-      for (Entry<String, Object> entry : iMap.entrySet())
+      for (Entry<String, ? extends Object> entry : iMap.entrySet())
         field(entry.getKey(), entry.getValue());
     }
     return this;
@@ -1301,6 +1337,9 @@ public class ODocument extends ORecordAbstract
         if (OType.EMBEDDED.equals(fieldType)) {
           final ODocument embeddedDocument = (ODocument) iPropertyValue;
           ODocumentInternal.addOwner(embeddedDocument, this);
+        } else if (OType.LINK.equals(fieldType)) {
+          final ODocument embeddedDocument = (ODocument) iPropertyValue;
+          ODocumentInternal.removeOwner(embeddedDocument, this);
         }
       }
       if (iPropertyValue instanceof OIdentifiable) {
@@ -2387,8 +2426,12 @@ public class ODocument extends ORecordAbstract
   }
 
   protected void fillClassIfNeed(final String iClassName) {
-    if (this._className == null)
-      setClassNameIfExists(iClassName);
+    if (this._className == null) {
+      _immutableClazz = null;
+      _immutableSchemaVersion = -1;
+      _className = iClassName;
+    }
+
   }
 
   protected OImmutableClass getImmutableSchemaClass() {
@@ -2805,6 +2848,12 @@ public class ODocument extends ORecordAbstract
     }
   }
 
+  protected void autoConvertFieldsToClass(final ODatabaseDocumentInternal database) {
+    if (_className != null) {
+      OClass klazz = database.getMetadata().getImmutableSchemaSnapshot().getClass(_className);
+      convertFieldsToClass(klazz);
+    }
+  }
   /**
    * Checks and convert the field of the document matching the types specified by the class.
    **/

@@ -29,6 +29,7 @@ import com.orientechnologies.common.log.OLogManager;
 import com.orientechnologies.common.parser.OSystemVariableResolver;
 import com.orientechnologies.orient.core.command.OCommandOutputListener;
 import com.orientechnologies.orient.core.compression.impl.OZIPCompressionUtil;
+import com.orientechnologies.orient.core.config.OContextConfiguration;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.config.OStorageConfiguration;
 import com.orientechnologies.orient.core.db.record.ridbag.sbtree.OIndexRIDContainer;
@@ -113,7 +114,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
   }
 
   @Override
-  public void create(final Map<String, Object> iProperties) {
+  public void create(OContextConfiguration contextConfiguration) {
     stateLock.acquireWriteLock();
     try {
       final File storageFolder = new File(storagePath);
@@ -121,7 +122,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
         if (!storageFolder.mkdirs())
           throw new OStorageException("Cannot create folders in storage with path " + storagePath);
 
-      super.create(iProperties);
+      super.create(contextConfiguration);
     } finally {
       stateLock.releaseWriteLock();
     }
@@ -181,7 +182,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
       final OutputStream bo = bufferSize > 0 ? new BufferedOutputStream(out, bufferSize) : out;
       try {
         return OZIPCompressionUtil
-            .compressDirectory(new File(getStoragePath()).getAbsolutePath(), bo, new String[] { ".wal" }, iOutput,
+            .compressDirectory(new File(getStoragePath()).getAbsolutePath(), bo, new String[] { ".wal" , ".fl"}, iOutput,
                 compressionLevel);
       } finally {
         if (bufferSize > 0) {
@@ -209,7 +210,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
         OLogManager.instance().error(this, "Error on calling callback on database restore");
       }
 
-    open(null, null, null);
+    open(null, null, new OContextConfiguration());
   }
 
   @Override
@@ -220,13 +221,6 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
     } finally {
       stateLock.releaseReadLock();
     }
-  }
-
-  @Override
-  public void close(boolean force, boolean onDelete) {
-    super.close(force, onDelete);
-    if (writeAheadLog != null)
-      ((ODiskWriteAheadLog) writeAheadLog).removeLowDiskSpaceListener(this);
   }
 
   @Override

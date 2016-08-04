@@ -283,7 +283,7 @@ public class ODistributedConfiguration {
   public Set<String> getServers(Collection<String> iClusterNames) {
     synchronized (configuration) {
       if (iClusterNames == null || iClusterNames.isEmpty())
-        iClusterNames = DEFAULT_CLUSTER_NAME;
+        return getAllConfiguredServers();
 
       final Set<String> partitions = new HashSet<String>(iClusterNames.size());
       for (String p : iClusterNames) {
@@ -323,6 +323,27 @@ public class ODistributedConfiguration {
   }
 
   /**
+   * Returns true if the local server has the requested cluster.
+   *
+   * @param server
+   *          Server name
+   * @param cluster
+   *          cluster names to find
+   */
+  public boolean isServerContainingCluster(final String server, String cluster) {
+    if (cluster == null)
+      cluster = ALL_WILDCARD;
+
+    synchronized (configuration) {
+      final List<String> serverList = getClusterConfiguration(cluster).field(SERVERS);
+      if (serverList != null) {
+        return serverList.contains(server);
+      }
+      return true;
+    }
+  }
+
+  /**
    * Returns the server list for the requested cluster cluster excluding any tags like <NEW_NODES> and iExclude if any.
    *
    * @param iClusterName
@@ -343,23 +364,6 @@ public class ODistributedConfiguration {
         return filteredServerList;
       }
       return Collections.EMPTY_LIST;
-    }
-  }
-
-  /**
-   * Returns true if the server has a cluster.
-   * 
-   * @param iServer
-   *          Server name
-   * @param iClusterName
-   *          Cluster name
-   */
-  public boolean hasCluster(final String iServer, final String iClusterName) {
-    synchronized (configuration) {
-      final List<String> serverList = getClusterConfiguration(iClusterName).field(SERVERS);
-      if (serverList != null)
-        return serverList.contains(iServer);
-      return false;
     }
   }
 
@@ -597,8 +601,9 @@ public class ODistributedConfiguration {
       }
 
       List<String> serverList = getClusterConfiguration(iClusterName).field(SERVERS);
-      if (serverList == null)
+      if (serverList == null) {
         serverList = initClusterServers(cluster);
+      }
 
       if (!serverList.isEmpty() && serverList.get(0).equals(iServerName))
         // ALREADY OWNER
@@ -693,6 +698,26 @@ public class ODistributedConfiguration {
 
       return (Integer) wq;
     }
+  }
+
+  /**
+   * Returns true if the database is sharded across servers. False if it's completely replicated.
+   */
+  public boolean isSharded() {
+    synchronized (configuration) {
+      final ODocument allCluster = getClusterConfiguration(ALL_WILDCARD);
+      if (allCluster != null) {
+        final List<String> allServers = allCluster.field(SERVERS);
+        if (allServers != null && !allServers.isEmpty()) {
+          for (String cl : getClusterNames()) {
+            final List<String> servers = getServers(cl);
+            if (servers != null && !servers.isEmpty() && !allServers.containsAll(servers))
+              return false;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -827,7 +852,7 @@ public class ODistributedConfiguration {
     ODocumentInternal.addOwner(cluster, clusters);
     clusters.field(iClusterName, cluster, OType.EMBEDDED);
 
-    initClusterServers(cluster);
+    final List<String> servers = initClusterServers(cluster);
 
     return cluster;
   }

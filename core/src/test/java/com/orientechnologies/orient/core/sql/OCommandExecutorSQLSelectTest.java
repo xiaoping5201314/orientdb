@@ -1349,6 +1349,36 @@ public class OCommandExecutorSQLSelectTest {
     assertEquals(((Collection) differenceFieldValue).iterator().next(), 3);
   }
 
+  @Test
+  public void testFoo() {
+    //dispose it!
+    db.command(new OCommandSQL("create class testFoo")).execute();
+    db.command(new OCommandSQL("insert into testFoo set val = 1, name = 'foo'")).execute();
+    db.command(new OCommandSQL("insert into testFoo set val = 3, name = 'foo'")).execute();
+    db.command(new OCommandSQL("insert into testFoo set val = 5, name = 'bar'")).execute();
+
+    List<ODocument> results = db.query(new OSQLSynchQuery<ODocument>("select sum(val), name from testFoo group by name"));
+    assertEquals(results.size(), 2);
+
+  }
+
+  @Test
+  public void testDateComparison(){
+    //issue #6389
+
+    byte[] array = new byte[]{1,4,5,74,3,45,6,127,-120,2};
+
+    db.command(new OCommandSQL("create class TestDateComparison")).execute();
+    db.command(new OCommandSQL("create property TestDateComparison.dateProp DATE")).execute();
+
+    db.command(new OCommandSQL("insert into TestDateComparison set dateProp = '2016-05-01'")).execute();
+
+    List<ODocument> results = db.query(new OSQLSynchQuery<ODocument>("SELECT from TestDateComparison WHERE dateProp >= '2016-05-01'"));
+    assertEquals(results.size(), 1);
+    results =db.query(new OSQLSynchQuery<ODocument>("SELECT from TestDateComparison WHERE dateProp <= '2016-05-01'"));
+    assertEquals(results.size(), 1);
+
+  }
   private long indexUsages(ODatabaseDocumentTx db) {
     final long oldIndexUsage;
     try {
