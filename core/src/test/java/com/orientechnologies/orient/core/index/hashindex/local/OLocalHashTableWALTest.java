@@ -305,8 +305,8 @@ public class OLocalHashTableWALTest extends OLocalHashTableTest {
       } else {
         Assert.assertTrue(walRecord instanceof OUpdatePageRecord || walRecord instanceof OFileCreatedWALRecord
             || walRecord instanceof ONonTxOperationPerformedWALRecord || walRecord instanceof OFullCheckpointStartRecord
-            || walRecord instanceof OCheckpointEndRecord || walRecord instanceof OFuzzyCheckpointEndRecord ||
-            walRecord instanceof OFuzzyCheckpointStartRecord);
+            || walRecord instanceof OCheckpointEndRecord || walRecord instanceof OFuzzyCheckpointStartRecord
+            || walRecord instanceof OFuzzyCheckpointEndRecord);
       }
 
     }

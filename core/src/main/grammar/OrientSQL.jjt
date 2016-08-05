@@ -43,12 +43,8 @@ import com.orientechnologies.orient.core.exception.OQueryParsingException;
 /** Orient Database Sql grammar. */
 public class OrientSql {
 
-  class ValidationStats{
-    int luceneCount = 0;
-  }
   private int inputParamCount = 0;
 
-  private List<ValidationStats> validationStats = new ArrayList<ValidationStats>();
 
     public OrientSql(InputStream stream) {
       this(new JavaCharStream(stream));
@@ -328,6 +324,8 @@ TOKEN:
     |
     < COMMIT: ( "C" | "c") ( "O" | "o")  ( "M" | "m") ( "M" | "m") ( "I" | "i")  ( "T" | "t") >
     |
+    < ROLLBACK: ( "R" | "r") ( "O" | "o")  ( "L" | "l") ( "L" | "l") ( "B" | "b") ( "A" | "a") ( "C" | "c") ( "K" | "k")>
+    |
     < IF: ( "I" | "i") ( "F" | "f") >
     |
     < ISOLATION: ( "I" | "i") ( "S" | "s") ( "O" | "o") ( "L" | "l") ( "A" | "a") ( "T" | "t") ( "I" | "i") ( "O" | "o") ( "N" | "n") >
@@ -347,6 +345,8 @@ TOKEN:
 	< START: ( "S" | "s") ( "T" | "t") ( "A" | "a") ( "R" | "r") ( "T" | "t") >
 	|
 	< OPTIONAL: ( "O" | "o") ( "P" | "p") ( "T" | "t") ( "I" | "i") ( "O" | "o") ( "N" | "n") ( "A" | "a") ( "L" | "l") >
+	|
+	< COUNT: ( "C" | "c") ( "O" | "o") ( "U" | "u") ( "N" | "n") ( "T" | "t") >
 	|
 	< THIS: "@" ( ( "t" | "T" ) ( "h" | "H" ) ( "i" | "I" ) ( "s" | "S" ) ) >
 	|
@@ -771,6 +771,8 @@ OIdentifier Identifier():
     |
     token = <COMMIT>
     |
+    token = <ROLLBACK>
+    |
     token = <IF>
     |
     token = <ISOLATION>
@@ -792,6 +794,8 @@ OIdentifier Identifier():
     token = <START>
     |
     token = <OPTIONAL>
+    |
+    token = <COUNT>
     |
     quotedToken = <QUOTED_IDENTIFIER>
 ) {
@@ -985,6 +989,8 @@ OStatement StatementInternal():
                 |
                 result = CommitStatement()
                 |
+                result = RollbackStatement()
+                |
                 result = ReturnStatement()
                 |
                 result = SleepStatement()
@@ -1026,7 +1032,7 @@ OStatement QueryStatement():
 }
 
 OSelectWithoutTargetStatement SelectWithoutTargetStatement():
-{validationStats.add(0, new ValidationStats());}
+{}
 {
     (
     	<SELECT>
@@ -1057,13 +1063,13 @@ OSelectWithoutTargetStatement SelectWithoutTargetStatement():
         [ <NOCACHE> { jjtThis.noCache = true; } ]
     )
     {
-        jjtThis.validate(validationStats.remove(0));
+        jjtThis.validate();
         return jjtThis;
     }
 }
 
 OSelectStatement SelectStatement():
-{validationStats.add(0, new ValidationStats());}
+{}
 {
     (
    	    <SELECT>
@@ -1099,7 +1105,7 @@ OSelectStatement SelectStatement():
         [ <NOCACHE> { jjtThis.noCache = true; } ]
     )
     {
-        jjtThis.validate(validationStats.remove(0));
+        jjtThis.validate();
         return jjtThis;
     }
 }
@@ -1512,7 +1518,7 @@ OUpdateStatement UpdateStatement():
     	[ <UPSERT> { jjtThis.upsert = true; } ]
     	[
     	    <RETURN>
-    	    ( <BEFORE> { jjtThis.returnBefore = true; } | <AFTER> { jjtThis.returnAfter = true; } )
+    	    ( <BEFORE> { jjtThis.returnBefore = true; } | <AFTER> { jjtThis.returnAfter = true; } | <COUNT> { jjtThis.returnCount = true; })
     	    [
     	        jjtThis.returnProjection = Projection()
     	    ]
@@ -2629,11 +2635,6 @@ OLuceneOperator LuceneOperator():
 (
 	<LUCENE>
 ){
-    ValidationStats stats = validationStats.get(0);
-    stats.luceneCount++;
-//    if(stats.luceneCount > 1){
-//        throw new OQueryParsingException("Two or more LUCENE operators are not allowed in the same query");
-//    }
     return jjtThis;
 }
 }
@@ -4402,6 +4403,15 @@ OCommitStatement CommitStatement():
             <RETRY>
             jjtThis.retry = Integer()
         ]
+    )
+    {return jjtThis;}
+}
+
+ORollbackStatement RollbackStatement():
+{ }
+{
+    (
+        <ROLLBACK>
     )
     {return jjtThis;}
 }

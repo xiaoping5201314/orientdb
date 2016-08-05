@@ -635,13 +635,6 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
   private boolean checkSkipBlob() {
     if (expandTarget != null)
       return true;
-    if (projections != null) {
-      if (projections.size() > 1) {
-        return true;
-      }
-      if (projections.containsKey("@rid"))
-        return false;
-    }
     return false;
   }
 
@@ -1559,6 +1552,9 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
   }
 
   private boolean canRunParallel(int[] clusterIds, Iterator<? extends OIdentifiable> iTarget) {
+    if( getDatabase().getTransaction().isActive() )
+      return false;
+
     if (iTarget instanceof ORecordIteratorClusters) {
       if (clusterIds.length > 1) {
         final long totalRecords = getDatabase().getStorage().count(clusterIds);
@@ -2180,15 +2176,15 @@ public class OCommandExecutorSQLSelect extends OCommandExecutorSQLResultsetAbstr
             final List<Object> keyParams = new ArrayList<Object>(searchResultFieldsCount);
             // We get only subset contained in processed sub query.
             for (final String fieldName : indexDefinition.getFields().subList(0, searchResultFieldsCount)) {
-              final Object fieldValue = searchResult.fieldValuePairs.get(fieldName);
-              if (fieldValue instanceof OSQLQuery<?>) {
+              Object fieldValue = searchResult.fieldValuePairs.get(fieldName);
+              if (fieldValue instanceof OSQLQuery<?> || fieldValue instanceof OSQLFilterCondition) {
                 return false;
               }
 
               if (fieldValue != null) {
                 keyParams.add(fieldValue);
               } else {
-                if (searchResult.lastValue instanceof OSQLQuery<?>) {
+                if (searchResult.lastValue instanceof OSQLQuery<?> || searchResult.lastValue instanceof OSQLFilterCondition) {
                   return false;
                 }
 

@@ -20,10 +20,11 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.common.util.OCallable;
-import com.orientechnologies.orient.core.command.OCommandDistributedReplicateRequest;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
+import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.OLogSequenceNumber;
 
+import java.io.IOException;
 import java.util.Collection;
 
 /**
@@ -51,14 +52,17 @@ public interface ODistributedDatabase {
    *          Record to lock
    * @param iRequestId
    *          Request id
-   * @return true if the lock succeed, otherwise false
+   * @param timeout
+   *          Timeout in ms to wait for the lock
+   * @throws com.orientechnologies.orient.server.distributed.task.ODistributedRecordLockedException
+   *           if the record wasn't locked
    */
-  ODistributedRequestId lockRecord(OIdentifiable iRecord, final ODistributedRequestId iRequestId);
+  boolean lockRecord(OIdentifiable iRecord, final ODistributedRequestId iRequestId, long timeout);
 
   /**
    * Unlocks the record previously locked through #lockRecord method.
    *
-   * @see #lockRecord(OIdentifiable, ODistributedRequestId)
+   * @see #lockRecord(OIdentifiable, ODistributedRequestId, long)
    * @param iRecord
    * @param requestId
    */
@@ -83,4 +87,10 @@ public interface ODistributedDatabase {
   ODistributedServerManager getManager();
 
   ODatabaseDocumentTx getDatabaseInstance();
+
+  long getReceivedRequests();
+
+  long getProcessedRequests();
+
+  void setLSN(String sourceNodeName, OLogSequenceNumber taskLastLSN) throws IOException;
 }

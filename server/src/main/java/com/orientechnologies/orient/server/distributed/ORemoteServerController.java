@@ -19,39 +19,60 @@
  */
 package com.orientechnologies.orient.server.distributed;
 
+import com.orientechnologies.orient.core.config.OGlobalConfiguration;
+
 import java.io.IOException;
 
 /**
- * Remote server controller.
+ * Remote server controller. It handles the communication with remote servers in HA configuration.
  *
  * @author Luca Garulli
  */
 public class ORemoteServerController {
-  private final ORemoteServerChannel requestChannel;
-  private final ORemoteServerChannel responseChannel;
+  private final ORemoteServerChannel[] requestChannels;
+  private volatile int                 requestChannelIndex  = 0;
+
+  private final ORemoteServerChannel[] responseChannels;
+  private volatile int                 responseChannelIndex = 0;
 
   public ORemoteServerController(final ODistributedServerManager manager, final String iServer, final String iURL,
       final String user, final String passwd) throws IOException {
-    ODistributedServerLog.debug(this, manager.getLocalNodeName(), iServer, ODistributedServerLog.DIRECTION.OUT,
-        "Creating remote channel to distributed server...");
+    if( user == null )
+      throw new IllegalArgumentException("User is null");
+    if( passwd == null )
+      throw new IllegalArgumentException("Password is null");
 
-    requestChannel = new ORemoteServerChannel(manager, iServer, iURL, user, passwd);
-    responseChannel = new ORemoteServerChannel(manager, iServer, iURL, user, passwd);
+    ODistributedServerLog.debug(this, manager.getLocalNodeName(), iServer, ODistributedServerLog.DIRECTION.OUT,
+        "Creating remote channel(s) to distributed server...");
+
+    requestChannels = new ORemoteServerChannel[OGlobalConfiguration.DISTRIBUTED_REQUEST_CHANNELS.getValueAsInteger()];
+    for (int i = 0; i < requestChannels.length; ++i)
+      requestChannels[i] = new ORemoteServerChannel(manager, iServer, iURL, user, passwd);
+
+    responseChannels = new ORemoteServerChannel[OGlobalConfiguration.DISTRIBUTED_RESPONSE_CHANNELS.getValueAsInteger()];
+    for (int i = 0; i < responseChannels.length; ++i)
+      responseChannels[i] = new ORemoteServerChannel(manager, iServer, iURL, user, passwd);
   }
 
   public void sendRequest(final ODistributedRequest req) {
-    requestChannel.sendRequest(req);
+    int idx = requestChannelIndex++;
+    if( idx < 0)
+      idx = 0;
+    requestChannels[idx % responseChannels.length].sendRequest(req);
   }
 
   public void sendResponse(final ODistributedResponse response) {
-    responseChannel.sendResponse(response);
+    int idx = responseChannelIndex++;
+    if( idx < 0)
+      idx = 0;
+    responseChannels[idx % responseChannels.length].sendResponse(response);
   }
 
   public void close() {
-    ODistributedServerLog.debug(this, requestChannel.getManager().getLocalNodeName(), requestChannel.getServer(),
-        ODistributedServerLog.DIRECTION.OUT, "Closing remote channel to distributed server...");
+    for (int i = 0; i < requestChannels.length; ++i)
+      requestChannels[i].close();
 
-    requestChannel.close();
-    responseChannel.close();
+    for (int i = 0; i < responseChannels.length; ++i)
+      responseChannels[i].close();
   }
 }
