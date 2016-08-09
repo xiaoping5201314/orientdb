@@ -1716,22 +1716,33 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
             }
 
             if (acquired) {
-              final List<ByteBuffer> buffers = new ArrayList<ByteBuffer>(chunk.size());
+              final List<ByteBuffer> copyBuffers = new ArrayList<ByteBuffer>(chunk.size());
 
               for (final OCachePointer cachePointer : chunk) {
                 final ByteBuffer buffer = cachePointer.getSharedBuffer();
-                buffers.add(buffer);
-
                 preparePageToFlush(buffer);
+
+                final ByteBuffer copy = bufferPool.acquireDirect(false);
                 buffer.position(0);
+                copy.position(0);
+                copy.put(buffer);
+
+                cachePointer.releaseSharedLock();
+
+                copy.position(0);
+                copyBuffers.add(copy);
               }
 
               final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, chunkPageKey.fileId));
               try {
                 final OFileClassic fileClassic = entry.get();
-                fileClassic.write(chunkPageKey.pageIndex * pageSize, buffers.toArray(new ByteBuffer[0]));
+                fileClassic.write(chunkPageKey.pageIndex * pageSize, copyBuffers.toArray(new ByteBuffer[0]));
               } finally {
                 files.release(entry);
+              }
+
+              for (ByteBuffer buffer : copyBuffers) {
+                bufferPool.release(buffer);
               }
 
               for (OCachePointer pointer : chunk) {
@@ -1751,8 +1762,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
                   pagesByLSN.remove(firstChangedLSN);
 
                 writeCacheSize.decrement();
-
-                pointer.releaseSharedLock();
               }
 
               flushed = true;
@@ -1773,26 +1782,46 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               if (!cachePointer.tryAcquireSharedLock())
                 continue;
 
+              final ByteBuffer copy = bufferPool.acquireDirect(false);
               try {
-                flushPage(pageKey.fileId, pageKey.pageIndex, cachePointer.getSharedBuffer());
+                try {
+                  final ByteBuffer buffer = cachePointer.getSharedBuffer();
+                  preparePageToFlush(buffer);
 
-                final OLogSequenceNumber firstChangedLSN = cachePointer.getFirstChangedLSN();
+                  buffer.position(0);
+                  copy.position(0);
 
-                cachePointer.clearFirstChangedLSN();
-                cachePointer.decrementWritersReferrer();
+                  copy.put(buffer);
+                } finally {
+                  cachePointer.releaseSharedLock();
+                }
 
-                cachePointer.setWritersListener(null);
-
-                writeCachePages.remove(pageKey);
-                if (firstChangedLSN != null)
-                  pagesByLSN.remove(firstChangedLSN);
-
-                writeCacheSize.decrement();
-
-                flushedPages++;
+                copy.position(0);
+                final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
+                try {
+                  final OFileClassic fileClassic = entry.get();
+                  fileClassic.write(pageKey.pageIndex * pageSize, copy);
+                } finally {
+                  files.release(entry);
+                }
               } finally {
-                cachePointer.releaseSharedLock();
+                bufferPool.release(copy);
               }
+
+              final OLogSequenceNumber firstChangedLSN = cachePointer.getFirstChangedLSN();
+
+              cachePointer.clearFirstChangedLSN();
+              cachePointer.decrementWritersReferrer();
+
+              cachePointer.setWritersListener(null);
+
+              writeCachePages.remove(pageKey);
+              if (firstChangedLSN != null)
+                pagesByLSN.remove(firstChangedLSN);
+
+              writeCacheSize.decrement();
+
+              flushedPages++;
 
               lastFlushedKey = pageKey;
 
