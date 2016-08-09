@@ -20,6 +20,10 @@
 package com.orientechnologies.orient.server.distributed.impl.task;
 
 import com.orientechnologies.orient.core.command.OCommandDistributedReplicateRequest;
+import com.orientechnologies.orient.server.distributed.ODistributedRequest;
+import com.orientechnologies.orient.server.distributed.ODistributedRequestId;
+import com.orientechnologies.orient.server.distributed.ODistributedServerManager;
+import com.orientechnologies.orient.server.distributed.task.ORemoteTask;
 
 /**
  * Repairs records through the distributed server.
@@ -27,8 +31,7 @@ import com.orientechnologies.orient.core.command.OCommandDistributedReplicateReq
  * @author Luca Garulli (l.garulli--at--orientechnologies.com)
  */
 public class ORepairRecordsTask extends OTxTask {
-  private static final long serialVersionUID = 1L;
-  public static final int   FACTORYID        = 17;
+  public static final int FACTORYID = 17;
 
   public ORepairRecordsTask() {
   }
@@ -57,4 +60,14 @@ public class ORepairRecordsTask extends OTxTask {
     return FACTORYID;
   }
 
+  @Override
+  public ORemoteTask getUndoTask(ODistributedRequestId reqId) {
+    return null;
+  }
+
+  @Override
+  public ORemoteTask getFixTask(ODistributedRequest iRequest, ORemoteTask iOriginalTask, Object iBadResponse, Object iGoodResponse,
+      String executorNodeName, ODistributedServerManager dManager) {
+    return null;
+  }
 }

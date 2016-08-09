@@ -26,7 +26,7 @@ import com.orientechnologies.orient.core.record.impl.ODocument;
 import com.orientechnologies.orient.core.storage.OStorage;
 import com.orientechnologies.orient.server.OServer;
 import com.orientechnologies.orient.server.distributed.ODistributedRequest.EXECUTION_MODE;
-import com.orientechnologies.orient.server.distributed.conflict.ODistributedConflictResolver;
+import com.orientechnologies.orient.server.distributed.conflict.ODistributedConflictResolverFactory;
 import com.orientechnologies.orient.server.distributed.task.ORemoteTask;
 
 import java.io.IOException;
@@ -227,7 +227,7 @@ public interface ODistributedServerManager {
 
   ORemoteTaskFactory getTaskFactory();
 
-  List<ODistributedConflictResolver> getConflictResolver();
-
   Set<String> getActiveServers();
+
+  ODistributedConflictResolverFactory getConflictResolverFactory();
 }

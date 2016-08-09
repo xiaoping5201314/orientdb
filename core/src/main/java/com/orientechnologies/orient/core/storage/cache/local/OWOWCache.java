@@ -243,7 +243,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   /**
    * Fires event about exception is thrown in data flush thread
    */
-  private void fireBackgroundDataProcessingExceptionEvent(Exception e) {
+  private void fireBackgroundDataProcessingExceptionEvent(Throwable e) {
     for (WeakReference<OBackgroundExceptionListener> ref : backgroundExceptionListeners) {
       final OBackgroundExceptionListener listener = ref.get();
       if (listener != null) {
@@ -703,6 +703,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               if (pagePointer != null) {
                 pagePointers[n].decrementReadersReferrer();
                 pagePointers[n] = pagePointer;
+                pagePointers[n].incrementReadersReferrer();
               }
             }
           }
