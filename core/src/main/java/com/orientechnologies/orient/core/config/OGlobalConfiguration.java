@@ -123,11 +123,13 @@ public enum OGlobalConfiguration {
   DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL("storage.diskCache.writeCachePageFlushInterval",
       "Interval between flushing of pages from write cache (in ms)", Integer.class, 25),
 
+  @Deprecated
   DISK_WRITE_CACHE_PAGES_PER_SECOND("storage.diskCache.writeCachePagesPerSecond",
       "Maximum amount of pages which should be flushed by disk write cache per second, depends on speed of disk drive. "
           + "The more pages per second will be flushed the less speed of disk read operations."
           + " For HDD typical value is 50 for SSD it differs from 100 to 1000 depends on access times", Integer.class, 50),
 
+  @Deprecated
   DISK_WRITE_CACHE_FLUSH_WRITE_INACTIVITY_INTERVAL("storage.diskCache.writeCacheFlushInactivityInterval",
       "Interval between 2 writes to the disk cache,"
           + " if writes are done with an interval more than provided, all files will be fsynced before the next write,"
@@ -137,7 +139,8 @@ public enum OGlobalConfiguration {
   DISK_WRITE_CACHE_FLUSH_LOCK_TIMEOUT("storage.diskCache.writeCacheFlushLockTimeout",
       "Maximum amount of time the write cache will wait before a page flushes (in ms, -1 to disable)", Integer.class, -1),
 
-  @Deprecated DISC_CACHE_FREE_SPACE_CHECK_INTERVAL("storage.diskCache.diskFreeSpaceCheckInterval",
+  @Deprecated
+  DISC_CACHE_FREE_SPACE_CHECK_INTERVAL("storage.diskCache.diskFreeSpaceCheckInterval",
       "The interval (in seconds), after which the storage periodically "
           + "checks whether the amount of free disk space is enough to work in write mode",
       Integer.class, 5),
