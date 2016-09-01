@@ -53,6 +53,7 @@ import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.OLogSe
 import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.OWriteAheadLog;
 import com.orientechnologies.orient.core.storage.impl.local.statistic.OPerformanceStatisticManager;
 import com.orientechnologies.orient.core.storage.impl.local.statistic.OSessionStoragePerformanceStatistic;
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
 
 import java.io.EOFException;
 import java.io.File;
@@ -62,7 +63,6 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.zip.CRC32;
@@ -86,9 +86,11 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final long freeSpaceLimit = OGlobalConfiguration.DISK_CACHE_FREE_SPACE_LIMIT.getValueAsLong() * 1024L * 1024L;
 
-  private final int                                        diskSizeCheckInterval = OGlobalConfiguration.DISC_CACHE_FREE_SPACE_CHECK_INTERVAL_IN_PAGES
-      .getValueAsInteger();
-  private final List<WeakReference<OLowDiskSpaceListener>> listeners             = new CopyOnWriteArrayList<WeakReference<OLowDiskSpaceListener>>();
+  private final int diskSizeCheckInterval = OGlobalConfiguration.DISC_CACHE_FREE_SPACE_CHECK_INTERVAL_IN_PAGES.getValueAsInteger();
+
+  private final int backgroundFlushInterval = OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL.getValueAsInteger() * 500;
+
+  private final List<WeakReference<OLowDiskSpaceListener>> listeners = new CopyOnWriteArrayList<WeakReference<OLowDiskSpaceListener>>();
 
   private final AtomicLong lastDiskSpaceCheck = new AtomicLong(0);
   private final String storagePath;
@@ -115,7 +117,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   private final ScheduledExecutorService commitExecutor;
 
   private final ExecutorService lowSpaceEventsPublisher;
-  private final AtomicBoolean checkpointInProgress = new AtomicBoolean();
 
   private volatile ConcurrentMap<String, Integer> nameIdMap;
 
@@ -130,14 +131,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   private File nameIdMapHolderFile;
 
   private final int id;
-
-  private long chunkCount   = 0;
-  private long chunkSizeSum = 0;
-
-  private long flushedPagesSum = 0;
-  private long flushCount      = 0;
-
-  private long reportTime = 0;
 
   private PageKey lastFlushedKey = null;
 
@@ -1491,7 +1484,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       Map.Entry<OLogSequenceNumber, PageKey> firstEntry;
 
       while (minDirtyLSN != null && minDirtyLSN.getSegment() < segmentId) {
-        flushWriteCacheFromMinLSN(1);
+        flushWriteCacheFromMinLSN(-1, false);
 
         firstEntry = pagesByLSN.firstEntry();
         if (firstEntry != null)
@@ -1521,37 +1514,13 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       if (statistic != null)
         statistic.startWriteCacheFlushTimer();
 
-      final long ms = System.currentTimeMillis();
-
-      if (reportTime == 0)
-        reportTime = ms;
-      else if (ms - reportTime > 10000) {
-        reportTime = ms;
-
-        if (chunkCount != 0)
-          System.out.println("Average chunk size : " + (chunkSizeSum / chunkCount));
-
-        if (flushCount != 0)
-          System.out.println("Average flush in pages : " + (flushedPagesSum / flushCount));
-
-        Map.Entry<OLogSequenceNumber, PageKey> minEntry = pagesByLSN.firstEntry();
-        if (minEntry != null)
-          System.out.println("MIN dirty lsn " + minEntry.getKey());
-        else
-          System.out.println("Min dirty lsn is null");
-
-        chunkSizeSum = 0;
-        chunkCount = 0;
-
-        flushedPagesSum = 0;
-        flushCount = 0;
-      }
-
       int flushedPages = 0;
       try {
         if (writeCachePages.isEmpty()) {
           return;
         }
+
+        final long startTs = System.nanoTime();
 
         // cache is split on two types of buffers
         //
@@ -1575,15 +1544,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         final long wcs = writeCacheSize.get();
         assert wcs >= 0;
 
-        final double cacheThreshold = ((double) wcs) / writeCacheMaxSize;
-        int writePagesToFlush = 0;
-        if (cacheThreshold > 0.3) {
-          writePagesToFlush = (int) Math.floor(((cacheThreshold - 0.3) / 0.4) * maxPagesPerFlush);
-        }
-
-        writePagesToFlush = Math.max(4, Math.min(maxPagesPerFlush, writePagesToFlush));
-
-        flushWriteCacheFromMinLSN(writePagesToFlush);
+        flushWriteCacheFromMinLSN(startTs, true);
 
       } catch (IOException e) {
         OLogManager.instance().error(this, "Exception during data flush", e);
@@ -1601,13 +1562,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
   }
 
-  private void flushWriteCacheFromMinLSN(int amountOfPagesToFlush) throws IOException {
-    //flag whether we iterate over the second part of the ring
-    boolean nextRound = false;
-
-    //amount of pages flushed at the moment
-    int flushedPages = 0;
-
+  private void flushWriteCacheFromMinLSN(final long startTs, boolean useFlushPeriod) throws IOException {
     //iterator which will be used to iterate over ring buffer
     Iterator<Map.Entry<PageKey, OCachePointer>> pageIterator;
 
@@ -1629,212 +1584,156 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       }
     }
 
-    //we go through virtual index which starts from 0 and ends with pages.size()-1
-    //but inside of cycle will use real index which starts from flushIndex and ends with
-    // flushIndex -1
-    Map.Entry<PageKey, OCachePointer> lastEntry = null;
+    //flag whether we iterate over the second part of the ring
+    boolean nextRound = false;
 
-    while (flushedPages < amountOfPagesToFlush) {
-      List<OCachePointer> chunk = new ArrayList<OCachePointer>();
-      PageKey lastPageKey = null;
-      PageKey chunkPageKey = null;
+    long endTs = System.nanoTime();
+    while (!useFlushPeriod || (endTs - startTs < backgroundFlushInterval)) {
+      try {
+        //if we reached first part of the ring, swap iterator to next part of the ring
+        if (!pageIterator.hasNext()) {
+          if (nextRound)
+            break;
 
-      if (lastEntry != null) {
-        chunk.add(lastEntry.getValue());
-        chunkPageKey = lastEntry.getKey();
-        lastPageKey = chunkPageKey;
-
-        lastEntry = null;
-      }
-
-      if (!pageIterator.hasNext()) {
-        if (nextRound)
-          break;
-
-        if (initialKey != null) {
-          pageIterator = writeCachePages.headMap(initialKey, false).entrySet().iterator();
-          nextRound = true;
-        } else {
-          break;
-        }
-      }
-
-      while (chunk.size() < 10 && pageIterator.hasNext()) {
-        final Map.Entry<PageKey, OCachePointer> entry = pageIterator.next();
-        final PageKey pageKey = entry.getKey();
-        final OCachePointer page = entry.getValue();
-
-        if (initialKey == null)
-          initialKey = pageKey;
-
-        if (chunk.isEmpty()) {
-          chunk.add(page);
-
-          chunkPageKey = entry.getKey();
-        } else {
-          if (chunkPageKey.fileId == pageKey.fileId && lastPageKey.pageIndex + 1 == entry.getKey().pageIndex) {
-            chunk.add(entry.getValue());
+          if (initialKey != null) {
+            pageIterator = writeCachePages.headMap(initialKey, false).entrySet().iterator();
+            nextRound = true;
           } else {
-            lastEntry = entry;
             break;
           }
         }
 
-        lastPageKey = entry.getKey();
-      }
+        //no more data to iterate
+        if (!pageIterator.hasNext())
+          break;
 
-      if (!chunk.isEmpty()) {
-        chunkCount++;
-        chunkSizeSum += chunk.size();
+        final Map.Entry<PageKey, OCachePointer> cacheEntry = pageIterator.next();
+        final PageKey pageKey = cacheEntry.getKey();
+        final OCachePointer pointer = cacheEntry.getValue();
 
-        boolean flushed = false;
+        if (initialKey == null)
+          initialKey = pageKey;
 
-        if (chunk.size() > 1) {
-          final PageKey[] pageKeys = new PageKey[chunk.size()];
+        final Lock lock = lockManager.acquireExclusiveLock(pageKey);
+        try {
+          if (!pointer.tryAcquireSharedLock())
+            continue;
 
-          for (int n = 0; n < pageKeys.length; n++) {
-            final OCachePointer cachePointer = chunk.get(n);
-            pageKeys[n] = new PageKey(internalFileId(cachePointer.getFileId()), cachePointer.getPageIndex());
-          }
+          final OLogSequenceNumber firstChangedLSN = pointer.getFirstChangedLSN();
+          pointer.clearFirstChangedLSN();
 
-          final Lock[] locks = lockManager.acquireExclusiveLocksInBatch(pageKeys);
+          final ByteBuffer copy = bufferPool.acquireDirect(false);
           try {
-            boolean acquired = true;
+            try {
+              final ByteBuffer buffer = pointer.getSharedBuffer();
+              preparePageToFlush(buffer);
 
-            for (int n = 0; n < chunk.size(); n++) {
-              final OCachePointer cachePointer = chunk.get(n);
+              buffer.position(0);
+              copy.position(0);
 
-              if (!cachePointer.tryAcquireSharedLock()) {
-                for (int k = 0; k < n; k++) {
-                  final OCachePointer pointer = chunk.get(k);
-                  pointer.releaseSharedLock();
-                }
-
-                acquired = false;
-                break;
-              }
+              copy.put(buffer);
+            } finally {
+              pointer.releaseSharedLock();
             }
 
-            if (acquired) {
-              final List<ByteBuffer> copyBuffers = new ArrayList<ByteBuffer>(chunk.size());
+            copy.position(0);
+            final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
+            try {
+              final OFileClassic fileClassic = entry.get();
+              fileClassic.write(pageKey.pageIndex * pageSize, copy);
+            } finally {
+              files.release(entry);
+            }
+          } finally {
+            bufferPool.release(copy);
+          }
 
-              for (final OCachePointer cachePointer : chunk) {
-                final ByteBuffer buffer = cachePointer.getSharedBuffer();
+          pointer.decrementWritersReferrer();
+          pointer.setWritersListener(null);
+
+          pageIterator.remove();
+
+          if (firstChangedLSN != null)
+            pagesByLSN.remove(firstChangedLSN);
+
+          writeCacheSize.decrement();
+
+          lastFlushedKey = pageKey;
+        } finally {
+          lock.unlock();
+        }
+      } finally {
+        endTs = System.nanoTime();
+      }
+
+      if (!useFlushPeriod)
+        break;
+    }
+  }
+
+  private void flushExclusiveWriteCache(final long startTs) throws IOException {
+    final Iterator<PageKey> iterator = exclusiveWritePages.iterator();
+    long endTs = System.nanoTime();
+
+    while (iterator.hasNext() && endTs - startTs < backgroundFlushInterval) {
+      try {
+        final PageKey pageKey = iterator.next();
+
+        final Lock lock = lockManager.acquireExclusiveLock(pageKey);
+        try {
+          final OCachePointer pointer = writeCachePages.get(pageKey);
+          if (pointer == null) {
+            iterator.remove();
+          } else {
+            if (!pointer.tryAcquireSharedLock())
+              continue;
+
+            final OLogSequenceNumber firstChangedLSN = pointer.getFirstChangedLSN();
+            pointer.clearFirstChangedLSN();
+
+            final ByteBuffer copy = bufferPool.acquireDirect(false);
+            try {
+              try {
+                final ByteBuffer buffer = pointer.getSharedBuffer();
                 preparePageToFlush(buffer);
 
-                final ByteBuffer copy = bufferPool.acquireDirect(false);
                 buffer.position(0);
                 copy.position(0);
+
                 copy.put(buffer);
-
-                cachePointer.releaseSharedLock();
-
-                copy.position(0);
-                copyBuffers.add(copy);
+              } finally {
+                pointer.releaseSharedLock();
               }
 
-              final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, chunkPageKey.fileId));
+              copy.position(0);
+              final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
               try {
                 final OFileClassic fileClassic = entry.get();
-                fileClassic.write(chunkPageKey.pageIndex * pageSize, copyBuffers.toArray(new ByteBuffer[0]));
+                fileClassic.write(pageKey.pageIndex * pageSize, copy);
               } finally {
                 files.release(entry);
               }
-
-              for (ByteBuffer buffer : copyBuffers) {
-                bufferPool.release(buffer);
-              }
-
-              for (OCachePointer pointer : chunk) {
-                final OLogSequenceNumber firstChangedLSN = pointer.getFirstChangedLSN();
-
-                pointer.clearFirstChangedLSN();
-
-                pointer.decrementWritersReferrer();
-                pointer.setWritersListener(null);
-
-                final PageKey pageKey = new PageKey(internalFileId(pointer.getFileId()), pointer.getPageIndex());
-                writeCachePages.remove(pageKey);
-
-                lastFlushedKey = pageKey;
-
-                if (firstChangedLSN != null)
-                  pagesByLSN.remove(firstChangedLSN);
-
-                writeCacheSize.decrement();
-              }
-
-              flushed = true;
-
-              flushedPages += chunk.size();
-            }
-          } finally {
-            for (Lock lock : locks)
-              lock.unlock();
-          }
-        }
-
-        if (!flushed) {
-          for (OCachePointer cachePointer : chunk) {
-            final PageKey pageKey = new PageKey(internalFileId(cachePointer.getFileId()), cachePointer.getPageIndex());
-            final Lock lock = lockManager.acquireExclusiveLock(pageKey);
-            try {
-              if (!cachePointer.tryAcquireSharedLock())
-                continue;
-
-              final ByteBuffer copy = bufferPool.acquireDirect(false);
-              try {
-                try {
-                  final ByteBuffer buffer = cachePointer.getSharedBuffer();
-                  preparePageToFlush(buffer);
-
-                  buffer.position(0);
-                  copy.position(0);
-
-                  copy.put(buffer);
-                } finally {
-                  cachePointer.releaseSharedLock();
-                }
-
-                copy.position(0);
-                final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
-                try {
-                  final OFileClassic fileClassic = entry.get();
-                  fileClassic.write(pageKey.pageIndex * pageSize, copy);
-                } finally {
-                  files.release(entry);
-                }
-              } finally {
-                bufferPool.release(copy);
-              }
-
-              final OLogSequenceNumber firstChangedLSN = cachePointer.getFirstChangedLSN();
-
-              cachePointer.clearFirstChangedLSN();
-              cachePointer.decrementWritersReferrer();
-
-              cachePointer.setWritersListener(null);
-
-              writeCachePages.remove(pageKey);
-              if (firstChangedLSN != null)
-                pagesByLSN.remove(firstChangedLSN);
-
-              writeCacheSize.decrement();
-
-              flushedPages++;
-
-              lastFlushedKey = pageKey;
-
             } finally {
-              lock.unlock();
+              bufferPool.release(copy);
             }
+
+            pointer.decrementWritersReferrer();
+            pointer.setWritersListener(null);
+
+            writeCachePages.remove(pageKey);
+
+            if (firstChangedLSN != null)
+              pagesByLSN.remove(firstChangedLSN);
+
+            writeCacheSize.decrement();
           }
+        } finally {
+          lock.unlock();
         }
+      } finally {
+        endTs = System.nanoTime();
       }
     }
-
-    flushCount++;
-    flushedPagesSum += flushedPages;
   }
 
   private int flushExclusiveWritePagesRing(final int writePagesToFlush, int flushedPages) throws IOException {
