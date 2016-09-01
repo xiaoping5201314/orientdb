@@ -203,7 +203,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (!exists())
         throw new OStorageException("Cannot open the storage '" + name + "' because it does not exist in path: " + url);
 
-      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
+      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(1, new FuzzyCheckpointThreadFactory());
       configuration.load(iProperties);
 
       final String cs = configuration.getConflictStrategy();
@@ -343,7 +343,7 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (exists())
         throw new OStorageExistsException("Cannot create new storage '" + getURL() + "' because it already exists");
 
-      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(0, new FuzzyCheckpointThreadFactory());
+      fuzzyCheckpointExecutor = Executors.newScheduledThreadPool(1, new FuzzyCheckpointThreadFactory());
 
       if (!configuration.getContextConfiguration().getContextKeys()
           .contains(OGlobalConfiguration.STORAGE_COMPRESSION_METHOD.getKey())) {
@@ -4170,8 +4170,6 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
     if (lowDiskSpace != null) {
       if (checkpointInProgress.compareAndSet(false, true)) {
         try {
-          makeFuzzyCheckpoint();
-
           if (writeCache.checkLowDiskSpace()) {
             synch();
 
