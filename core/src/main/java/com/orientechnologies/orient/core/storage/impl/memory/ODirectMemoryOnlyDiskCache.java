@@ -206,7 +206,18 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
-  public OCacheEntry load(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, final int pageCount) {
+  public OCacheEntry loadForWrite(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
+      throws IOException {
+    return doLoad(fileId, pageIndex);
+  }
+
+  @Override
+  public OCacheEntry loadForRead(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
+      throws IOException {
+    return doLoad(fileId, pageIndex);
+  }
+
+  private OCacheEntry doLoad(long fileId, long pageIndex) {
     final OSessionStoragePerformanceStatistic sessionStoragePerformanceStatistic = performanceStatisticManager
         .getSessionPerformanceStatistic();
 
@@ -275,7 +286,20 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   }
 
   @Override
-  public void release(OCacheEntry cacheEntry, OWriteCache writeCache) {
+  public void releaseFromWrite(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    doRelease(cacheEntry);
+  }
+
+  @Override
+  public void releaseFromRead(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    doRelease(cacheEntry);
+  }
+
+  @Override
+  public void updateDirtyPagesTable(long fileId, long pageIndex) throws IOException {
+  }
+
+  private void doRelease(OCacheEntry cacheEntry) {
     synchronized (cacheEntry) {
       cacheEntry.decrementUsages();
       assert cacheEntry.getUsagesCount() > 0 || !cacheEntry.isLockAcquiredByCurrentThread();

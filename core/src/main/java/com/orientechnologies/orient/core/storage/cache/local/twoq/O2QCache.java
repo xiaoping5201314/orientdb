@@ -282,9 +282,118 @@ public class O2QCache implements OReadCache {
   }
 
   @Override
-  public OCacheEntry load(long fileId, final long pageIndex, final boolean checkPinnedPages, OWriteCache writeCache,
-      final int pageCount) throws IOException {
+  public OCacheEntry loadForWrite(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
+      throws IOException {
+    final OCacheEntry cacheEntry = doLoad(fileId, pageIndex, checkPinnedPages, writeCache, pageCount);
 
+    if (cacheEntry != null) {
+      cacheEntry.acquireExclusiveLock();
+      writeCache.updateDirtyPagesTable(fileId, pageIndex);
+    }
+
+    return cacheEntry;
+  }
+
+  @Override
+  public void releaseFromWrite(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    cacheEntry.releaseExclusiveLock();
+
+    Future<?> flushFuture = null;
+
+    Lock fileLock;
+    Lock pageLock;
+    cacheLock.acquireReadLock();
+    try {
+      fileLock = fileLockManager.acquireSharedLock(cacheEntry.getFileId());
+      try {
+        pageLock = pageLockManager.acquireExclusiveLock(new PageKey(cacheEntry.getFileId(), cacheEntry.getPageIndex()));
+        try {
+          cacheEntry.decrementUsages();
+
+          assert cacheEntry.getUsagesCount() >= 0;
+          assert cacheEntry.getUsagesCount() > 0 || !cacheEntry.isLockAcquiredByCurrentThread();
+
+          if (cacheEntry.getUsagesCount() == 0 && cacheEntry.isDirty()) {
+            final OSessionStoragePerformanceStatistic sessionStoragePerformanceStatistic = writeCache
+                .getPerformanceStatisticManager().getSessionPerformanceStatistic();
+
+            if (sessionStoragePerformanceStatistic != null) {
+              sessionStoragePerformanceStatistic.startPageWriteInCacheTimer();
+            }
+
+            try {
+              flushFuture = writeCache.store(cacheEntry.getFileId(), cacheEntry.getPageIndex(), cacheEntry.getCachePointer());
+            } finally {
+              if (sessionStoragePerformanceStatistic != null) {
+                sessionStoragePerformanceStatistic.stopPageWriteInCacheTimer();
+              }
+            }
+
+            cacheEntry.clearDirty();
+          }
+        } finally {
+          pageLockManager.releaseLock(pageLock);
+        }
+      } finally {
+        fileLockManager.releaseLock(fileLock);
+      }
+    } finally {
+      cacheLock.releaseReadLock();
+    }
+
+    if (flushFuture != null) {
+      try {
+        flushFuture.get();
+      } catch (InterruptedException e) {
+        Thread.interrupted();
+        throw new OInterruptedException("File flush was interrupted");
+      } catch (Exception e) {
+        throw OException.wrapException(new OReadCacheException("File flush was abnormally terminated"), e);
+      }
+    }
+  }
+
+  @Override
+  public OCacheEntry loadForRead(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
+      throws IOException {
+    final OCacheEntry cacheEntry = doLoad(fileId, pageIndex, checkPinnedPages, writeCache, pageCount);
+
+    if (cacheEntry != null) {
+      cacheEntry.acquireSharedLock();
+    }
+
+    return cacheEntry;
+  }
+
+  @Override
+  public void releaseFromRead(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    cacheEntry.releaseSharedLock();
+
+    Lock fileLock;
+    Lock pageLock;
+    cacheLock.acquireReadLock();
+    try {
+      fileLock = fileLockManager.acquireSharedLock(cacheEntry.getFileId());
+      try {
+        pageLock = pageLockManager.acquireExclusiveLock(new PageKey(cacheEntry.getFileId(), cacheEntry.getPageIndex()));
+        try {
+          cacheEntry.decrementUsages();
+
+          assert cacheEntry.getUsagesCount() >= 0;
+          assert cacheEntry.getUsagesCount() > 0 || !cacheEntry.isLockAcquiredByCurrentThread();
+        } finally {
+          pageLockManager.releaseLock(pageLock);
+        }
+      } finally {
+        fileLockManager.releaseLock(fileLock);
+      }
+    } finally {
+      cacheLock.releaseReadLock();
+    }
+  }
+
+  private OCacheEntry doLoad(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
+      throws IOException {
     final OSessionStoragePerformanceStatistic sessionStoragePerformanceStatistic = writeCache.getPerformanceStatisticManager()
         .getSessionPerformanceStatistic();
 
@@ -306,7 +415,7 @@ public class O2QCache implements OReadCache {
       } catch (RuntimeException e) {
         assert !cacheResult.cacheEntry.isDirty();
 
-        release(cacheResult.cacheEntry, writeCache);
+        releaseFromWrite(cacheResult.cacheEntry, writeCache);
         throw e;
       }
 
@@ -416,71 +525,21 @@ public class O2QCache implements OReadCache {
       } catch (RuntimeException e) {
         assert !cacheResult.cacheEntry.isDirty();
 
-        release(cacheResult.cacheEntry, writeCache);
+        releaseFromWrite(cacheResult.cacheEntry, writeCache);
         throw e;
       }
 
-      return cacheResult.cacheEntry;
+      final OCacheEntry cacheEntry = cacheResult.cacheEntry;
+
+      if (cacheEntry != null) {
+        cacheEntry.acquireExclusiveLock();
+        writeCache.updateDirtyPagesTable(fileId, cacheEntry.getPageIndex());
+      }
+
+      return cacheEntry;
     } finally {
       if (sessionStoragePerformanceStatistic != null) {
         sessionStoragePerformanceStatistic.stopPageReadFromCacheTimer();
-      }
-    }
-  }
-
-  @Override
-  public void release(OCacheEntry cacheEntry, OWriteCache writeCache) {
-    Future<?> flushFuture = null;
-
-    Lock fileLock;
-    Lock pageLock;
-    cacheLock.acquireReadLock();
-    try {
-      fileLock = fileLockManager.acquireSharedLock(cacheEntry.getFileId());
-      try {
-        pageLock = pageLockManager.acquireExclusiveLock(new PageKey(cacheEntry.getFileId(), cacheEntry.getPageIndex()));
-        try {
-          cacheEntry.decrementUsages();
-
-          assert cacheEntry.getUsagesCount() >= 0;
-          assert cacheEntry.getUsagesCount() > 0 || !cacheEntry.isLockAcquiredByCurrentThread();
-
-          if (cacheEntry.getUsagesCount() == 0 && cacheEntry.isDirty()) {
-            final OSessionStoragePerformanceStatistic sessionStoragePerformanceStatistic = writeCache
-                .getPerformanceStatisticManager().getSessionPerformanceStatistic();
-
-            if (sessionStoragePerformanceStatistic != null) {
-              sessionStoragePerformanceStatistic.startPageWriteInCacheTimer();
-            }
-
-            try {
-              flushFuture = writeCache.store(cacheEntry.getFileId(), cacheEntry.getPageIndex(), cacheEntry.getCachePointer());
-            } finally {
-              if (sessionStoragePerformanceStatistic != null) {
-                sessionStoragePerformanceStatistic.stopPageWriteInCacheTimer();
-              }
-            }
-
-            cacheEntry.clearDirty();
-          }
-        } finally {
-          pageLockManager.releaseLock(pageLock);
-        }
-      } finally {
-        fileLockManager.releaseLock(fileLock);
-      }
-    } finally {
-      cacheLock.releaseReadLock();
-    }
-
-    if (flushFuture != null) {
-      try {
-        flushFuture.get();
-      } catch (InterruptedException e) {
-        Thread.interrupted();
-        throw new OInterruptedException("File flush was interrupted");
-      } catch (Exception e) {
-        throw OException.wrapException(new OReadCacheException("File flush was abnormally terminated"), e);
       }
     }
   }

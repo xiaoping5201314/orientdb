@@ -166,4 +166,6 @@ public interface OWriteCache {
   OPerformanceStatisticManager getPerformanceStatisticManager();
 
   void flushTillSegment(long segmentId);
+
+  void updateDirtyPagesTable(long fileId, long pageIndex) throws IOException;
 }

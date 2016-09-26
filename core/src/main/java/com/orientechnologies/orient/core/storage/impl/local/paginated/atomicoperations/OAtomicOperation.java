@@ -115,8 +115,9 @@ public class OAtomicOperation {
 
         if (pageChangesContainer.isNew)
           return new OCacheEntry(fileId, pageIndex, new OCachePointer(null, null, fileId, pageIndex), false);
-        else
-          return readCache.load(fileId, pageIndex, checkPinnedPages, writeCache, pageCount);
+        else {
+          return readCache.loadForRead(fileId, pageIndex, checkPinnedPages, writeCache, pageCount);
+        }
       }
     }
 
@@ -190,7 +191,7 @@ public class OAtomicOperation {
       throw new OStorageException("File with id " + cacheEntry.getFileId() + " is deleted.");
 
     if (cacheEntry.getCachePointer().getSharedBuffer() != null)
-      readCache.release(cacheEntry, writeCache);
+      readCache.releaseFromRead(cacheEntry, writeCache);
     else {
       assert !cacheEntry.isLockAcquiredByCurrentThread();
     }
@@ -406,18 +407,17 @@ public class OAtomicOperation {
             continue;
           final long pageIndex = filePageChangesEntry.getKey();
 
-          OCacheEntry cacheEntry = readCache.load(fileId, pageIndex, true, writeCache, 1);
+          OCacheEntry cacheEntry = readCache.loadForWrite(fileId, pageIndex, true, writeCache, 1);
           if (cacheEntry == null) {
             assert filePageChanges.isNew;
             do {
               if (cacheEntry != null)
-                readCache.release(cacheEntry, writeCache);
+                readCache.releaseFromWrite(cacheEntry, writeCache);
 
               cacheEntry = readCache.allocateNewPage(fileId, writeCache);
             } while (cacheEntry.getPageIndex() != pageIndex);
           }
 
-          cacheEntry.acquireExclusiveLock();
           try {
             ODurablePage durablePage = new ODurablePage(cacheEntry, null);
             durablePage.restoreChanges(filePageChanges.changes);
@@ -429,8 +429,7 @@ public class OAtomicOperation {
               readCache.pinPage(cacheEntry);
 
           } finally {
-            cacheEntry.releaseExclusiveLock();
-            readCache.release(cacheEntry, writeCache);
+            readCache.releaseFromWrite(cacheEntry, writeCache);
           }
         }
       }
@@ -607,18 +606,17 @@ public class OAtomicOperation {
               continue;
             final long pageIndex = filePageChangesEntry.getKey();
 
-            OCacheEntry cacheEntry = readCache.load(fileId, pageIndex, true, writeCache, 1);
+            OCacheEntry cacheEntry = readCache.loadForWrite(fileId, pageIndex, true, writeCache, 1);
             if (cacheEntry == null) {
               assert filePageChanges.isNew;
               do {
                 if (cacheEntry != null)
-                  readCache.release(cacheEntry, writeCache);
+                  readCache.releaseFromWrite(cacheEntry, writeCache);
 
                 cacheEntry = readCache.allocateNewPage(fileId, writeCache);
               } while (cacheEntry.getPageIndex() != pageIndex);
             }
 
-            cacheEntry.acquireExclusiveLock();
             try {
               ODurablePage durablePage = new ODurablePage(cacheEntry, null);
               durablePage.restoreChanges(filePageChanges.changes);
@@ -630,8 +628,7 @@ public class OAtomicOperation {
                 readCache.pinPage(cacheEntry);
 
             } finally {
-              cacheEntry.releaseExclusiveLock();
-              readCache.release(cacheEntry, writeCache);
+              readCache.releaseFromWrite(cacheEntry, writeCache);
             }
           }
         }

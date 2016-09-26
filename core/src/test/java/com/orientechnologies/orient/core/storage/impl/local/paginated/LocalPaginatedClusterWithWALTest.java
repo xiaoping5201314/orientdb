@@ -372,16 +372,15 @@ public class LocalPaginatedClusterWithWALTest extends LocalPaginatedClusterTest 
             final long fileId = updatePageRecord.getFileId();
             final long pageIndex = updatePageRecord.getPageIndex();
 
-            OCacheEntry cacheEntry = expectedReadCache.load(fileId, pageIndex, true, expectedWriteCache, 1);
+            OCacheEntry cacheEntry = expectedReadCache.loadForWrite(fileId, pageIndex, true, expectedWriteCache, 1);
             if (cacheEntry == null) {
               do {
                 if (cacheEntry != null)
-                  readCache.release(cacheEntry, expectedWriteCache);
+                  readCache.releaseFromWrite(cacheEntry, expectedWriteCache);
 
                 cacheEntry = expectedReadCache.allocateNewPage(fileId, expectedWriteCache);
               } while (cacheEntry.getPageIndex() != pageIndex);
             }
-            cacheEntry.acquireExclusiveLock();
             try {
               ODurablePage durablePage = new ODurablePage(cacheEntry, null);
               durablePage.restoreChanges(updatePageRecord.getChanges());
@@ -389,8 +388,7 @@ public class LocalPaginatedClusterWithWALTest extends LocalPaginatedClusterTest 
 
               cacheEntry.markDirty();
             } finally {
-              cacheEntry.releaseExclusiveLock();
-              expectedReadCache.release(cacheEntry, expectedWriteCache);
+              expectedReadCache.releaseFromWrite(cacheEntry, expectedWriteCache);
             }
           }
         }

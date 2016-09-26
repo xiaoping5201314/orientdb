@@ -277,20 +277,18 @@ public class OLocalHashTableWALTest extends OLocalHashTableTest {
             final long fileId = updatePageRecord.getFileId();
             final long pageIndex = updatePageRecord.getPageIndex();
 
-            OCacheEntry cacheEntry = expectedReadCache.load(fileId, pageIndex, true, expectedWriteCache, 1);
+            OCacheEntry cacheEntry = expectedReadCache.loadForWrite(fileId, pageIndex, true, expectedWriteCache, 1);
             if (cacheEntry == null)
               do {
                 cacheEntry = expectedReadCache.allocateNewPage(fileId, expectedWriteCache);
               } while (cacheEntry.getPageIndex() != pageIndex);
 
-            cacheEntry.acquireExclusiveLock();
             try {
               ODurablePage durablePage = new ODurablePage(cacheEntry, null);
               durablePage.restoreChanges(updatePageRecord.getChanges());
               durablePage.setLsn(updatePageRecord.getLsn());
             } finally {
-              cacheEntry.releaseExclusiveLock();
-              expectedReadCache.release(cacheEntry, expectedWriteCache);
+              expectedReadCache.releaseFromWrite(cacheEntry, expectedWriteCache);
             }
           } else if (restoreRecord instanceof OFileCreatedWALRecord) {
             final OFileCreatedWALRecord fileCreatedCreatedRecord = (OFileCreatedWALRecord) restoreRecord;
