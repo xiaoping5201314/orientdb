@@ -21,9 +21,7 @@
 package com.orientechnologies.orient.core.storage.impl.local.paginated;
 
 import com.orientechnologies.common.collection.closabledictionary.OClosableLinkedContainer;
-import com.orientechnologies.common.concur.lock.OInterruptedException;
 import com.orientechnologies.common.directmemory.OByteBufferPool;
-import com.orientechnologies.common.exception.OException;
 import com.orientechnologies.common.io.OFileUtils;
 import com.orientechnologies.common.io.OIOUtils;
 import com.orientechnologies.common.log.OLogManager;
@@ -441,7 +439,7 @@ public class OLocalPaginatedStorage extends OAbstractPaginatedStorage implements
 
     final OWOWCache wowCache = new OWOWCache(false, OGlobalConfiguration.DISK_CACHE_PAGE_SIZE.getValueAsInteger() * ONE_KB,
         OByteBufferPool.instance(), writeAheadLog, OGlobalConfiguration.DISK_WRITE_CACHE_PAGE_FLUSH_INTERVAL.getValueAsInteger(),
-        writeCacheSize, diskCacheSize, this, true, files, getId());
+        writeCacheSize, this, true, files, getId());
     wowCache.loadRegisteredFiles();
     wowCache.addLowDiskSpaceListener(this);
     wowCache.addBackgroundExceptionListener(this);

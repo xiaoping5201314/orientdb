@@ -100,7 +100,7 @@ public class WOWCacheTest {
   }
 
   private void initBuffer() throws IOException {
-    wowCache = new OWOWCache(true, pageSize, new OByteBufferPool(pageSize), writeAheadLog, 10, 100, 100, storageLocal, false,
+    wowCache = new OWOWCache(true, pageSize, new OByteBufferPool(pageSize), writeAheadLog, 10, 100, storageLocal, false,
         files, 1);
     wowCache.loadRegisteredFiles();
   }

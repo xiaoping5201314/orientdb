@@ -119,7 +119,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private       RandomAccessFile nameIdMapHolder;
   private final int              exclusiveWriteCacheMaxSize;
-  private final int              writeCacheMaxSize;
 
   private int fileCounter = 1;
 
@@ -141,8 +140,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   private final List<WeakReference<OBackgroundExceptionListener>> backgroundExceptionListeners = new CopyOnWriteArrayList<WeakReference<OBackgroundExceptionListener>>();
 
   public OWOWCache(boolean syncOnPageFlush, int pageSize, OByteBufferPool bufferPool, OWriteAheadLog writeAheadLog,
-      long pageFlushInterval, long exclusiveWriteCacheMaxSize, long writeCacheMaxSize, OLocalPaginatedStorage storageLocal,
-      boolean checkMinSize, OClosableLinkedContainer<Long, OFileClassic> files, int id) {
+      long pageFlushInterval, long exclusiveWriteCacheMaxSize, OLocalPaginatedStorage storageLocal, boolean checkMinSize,
+      OClosableLinkedContainer<Long, OFileClassic> files, int id) {
     filesLock.acquireWriteLock();
     try {
       this.id = id;
@@ -157,12 +156,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       if (checkMinSize && writeNormalizedSize < MIN_CACHE_SIZE)
         writeNormalizedSize = MIN_CACHE_SIZE;
 
-      int normalizedSize = normalizeMemory(writeCacheMaxSize, pageSize);
-      if (checkMinSize && normalizedSize < MIN_CACHE_SIZE)
-        normalizedSize = MIN_CACHE_SIZE;
-
       this.exclusiveWriteCacheMaxSize = writeNormalizedSize;
-      this.writeCacheMaxSize = normalizedSize;
 
       this.storageLocal = storageLocal;
 

@@ -143,7 +143,7 @@ public class ReadWriteDiskCacheTest {
 
   private void initBuffer() throws IOException {
     writeBuffer = new OWOWCache(false, PAGE_SIZE, new OByteBufferPool(PAGE_SIZE), writeAheadLog, -1, WRITE_CACHE_MAX_SIZE,
-        WRITE_CACHE_MAX_SIZE + READ_CACHE_MAX_MEMORY, storageLocal, false, files, 1);
+        storageLocal, false, files, 1);
     writeBuffer.loadRegisteredFiles();
 
     readBuffer = new O2QCache(READ_CACHE_MAX_MEMORY, PAGE_SIZE, false, 50);
@@ -1082,7 +1082,7 @@ public class ReadWriteDiskCacheTest {
     segmentConfiguration.fileType = OFileClassic.NAME;
 
     writeBuffer = new OWOWCache(false, 8 + systemOffset, new OByteBufferPool(8 + systemOffset), writeAheadLog, 100,
-        2 * (8 + systemOffset), 2 * (8 + systemOffset) + 4 * (8 + systemOffset), storageLocal, false, files, 10);
+        2 * (8 + systemOffset), storageLocal, false, files, 10);
     writeBuffer.loadRegisteredFiles();
     readBuffer = new O2QCache(4 * (8 + systemOffset), 8 + systemOffset, false, 20);
 
