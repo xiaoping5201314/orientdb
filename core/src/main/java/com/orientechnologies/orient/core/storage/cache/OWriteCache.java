@@ -167,5 +167,5 @@ public interface OWriteCache {
 
   void flushTillSegment(long segmentId);
 
-  void updateDirtyPagesTable(long fileId, long pageIndex) throws IOException;
+  void updateDirtyPagesTable(OCachePointer pointer) throws IOException;
 }

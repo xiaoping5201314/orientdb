@@ -288,7 +288,7 @@ public class O2QCache implements OReadCache {
 
     if (cacheEntry != null) {
       cacheEntry.acquireExclusiveLock();
-      writeCache.updateDirtyPagesTable(fileId, pageIndex);
+      writeCache.updateDirtyPagesTable(cacheEntry.getCachePointer());
     }
 
     return cacheEntry;
@@ -369,6 +369,10 @@ public class O2QCache implements OReadCache {
   public void releaseFromRead(OCacheEntry cacheEntry, OWriteCache writeCache) {
     cacheEntry.releaseSharedLock();
 
+    doRelease(cacheEntry);
+  }
+
+  private void doRelease(OCacheEntry cacheEntry) {
     Lock fileLock;
     Lock pageLock;
     cacheLock.acquireReadLock();
@@ -525,7 +529,7 @@ public class O2QCache implements OReadCache {
       } catch (RuntimeException e) {
         assert !cacheResult.cacheEntry.isDirty();
 
-        releaseFromWrite(cacheResult.cacheEntry, writeCache);
+        doRelease(cacheResult.cacheEntry);
         throw e;
       }
 
@@ -533,7 +537,7 @@ public class O2QCache implements OReadCache {
 
       if (cacheEntry != null) {
         cacheEntry.acquireExclusiveLock();
-        writeCache.updateDirtyPagesTable(fileId, cacheEntry.getPageIndex());
+        writeCache.updateDirtyPagesTable(cacheEntry.getCachePointer());
       }
 
       return cacheEntry;

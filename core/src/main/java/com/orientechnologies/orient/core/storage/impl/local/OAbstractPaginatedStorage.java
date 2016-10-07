@@ -4151,7 +4151,19 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (status != STATUS.OPEN || writeAheadLog == null)
         return;
 
-      final long fuzzySegment = fetchMinDirtySegment();
+      final OLogSequenceNumber minLSN = writeCache.getMinimalNotFlushedLSN();
+      final long fuzzySegment;
+
+      if (minLSN != null) {
+        fuzzySegment = minLSN.getSegment();
+      } else {
+        final OLogSequenceNumber endLSN = writeAheadLog.end();
+        if (endLSN == null)
+          return;
+
+        fuzzySegment = endLSN.getSegment();
+      }
+
       writeCache.makeFuzzyCheckpoint(fuzzySegment);
 
     } catch (IOException ioe) {
@@ -4424,10 +4436,17 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
         long minDirtySegment;
         do {
           writeCache.flushTillSegment(flushTillSegmentId);
-          minDirtySegment = fetchMinDirtySegment();
+
+          OLogSequenceNumber minDirtyLSN = writeCache.getMinimalNotFlushedLSN();
+          if (minDirtyLSN == null) {
+            OLogSequenceNumber endLSN = writeAheadLog.end();
+            minDirtySegment = endLSN.getSegment();
+          } else {
+            minDirtySegment = minDirtyLSN.getSegment();
+          }
         } while (minDirtySegment < flushTillSegmentId);
 
-        writeCache.makeFuzzyCheckpoint(flushTillSegmentId);
+        writeCache.makeFuzzyCheckpoint(minDirtySegment);
 
       } catch (Exception e) {
         dataFlushException = e;

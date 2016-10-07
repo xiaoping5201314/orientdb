@@ -481,7 +481,13 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   }
 
   @Override
-  public void updateDirtyPagesTable(long fileId, long pageIndex) throws IOException {
+  public void updateDirtyPagesTable(OCachePointer pointer) throws IOException {
+    if (writeAheadLog == null || pointer.isInWriteCache())
+      return;
+
+    final long fileId = pointer.getFileId();
+    final long pageIndex = pointer.getPageIndex();
+
     PageKey pageKey = new PageKey(internalFileId(fileId), pageIndex);
 
     OLogSequenceNumber dirtyLSN = writeAheadLog.end();
@@ -642,6 +648,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
           dataPointer.setWritersListener(this);
           dataPointer.incrementWritersReferrer();
+          dataPointer.setInWriteCache(true);
         } else
           assert pagePointer.equals(dataPointer);
 
@@ -1614,6 +1621,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               copy.put(buffer);
 
               dirtyPages.remove(pageKey);
+              pointer.setInWriteCache(false);
             } finally {
               pointer.releaseSharedLock();
             }
@@ -1682,6 +1690,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
                 copy.put(buffer);
 
                 dirtyPages.remove(pageKey);
+                pointer.setInWriteCache(false);
               } finally {
                 pointer.releaseSharedLock();
               }
@@ -1747,6 +1756,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
             flushPage(pageKey.fileId, pageKey.pageIndex, buffer);
 
             dirtyPages.remove(pageKey);
+            pagePointer.setInWriteCache(false);
           } finally {
             pagePointer.releaseSharedLock();
           }
@@ -1803,6 +1813,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
             writeCacheSize.decrement();
 
             dirtyPages.remove(pageKey);
+            pagePointer.setInWriteCache(false);
           } finally {
             pagePointer.releaseExclusiveLock();
           }

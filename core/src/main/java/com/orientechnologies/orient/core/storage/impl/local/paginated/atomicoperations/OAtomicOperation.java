@@ -193,7 +193,7 @@ public class OAtomicOperation {
     if (cacheEntry.getCachePointer().getSharedBuffer() != null)
       readCache.releaseFromRead(cacheEntry, writeCache);
     else {
-      assert !cacheEntry.isLockAcquiredByCurrentThread();
+      assert cacheEntry.getCachePointer().getSharedBuffer() == null || !cacheEntry.isLockAcquiredByCurrentThread();
     }
   }
 

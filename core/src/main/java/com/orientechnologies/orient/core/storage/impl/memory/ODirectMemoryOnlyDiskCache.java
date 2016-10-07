@@ -208,13 +208,29 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
   @Override
   public OCacheEntry loadForWrite(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
       throws IOException {
-    return doLoad(fileId, pageIndex);
+
+    final OCacheEntry cacheEntry = doLoad(fileId, pageIndex);
+
+    if (cacheEntry == null)
+      return null;
+
+    cacheEntry.acquireExclusiveLock();
+
+    return cacheEntry;
   }
 
   @Override
   public OCacheEntry loadForRead(long fileId, long pageIndex, boolean checkPinnedPages, OWriteCache writeCache, int pageCount)
       throws IOException {
-    return doLoad(fileId, pageIndex);
+
+    final OCacheEntry cacheEntry = doLoad(fileId, pageIndex);
+
+    if (cacheEntry == null)
+      return null;
+
+    cacheEntry.acquireSharedLock();
+
+    return cacheEntry;
   }
 
   private OCacheEntry doLoad(long fileId, long pageIndex) {
@@ -268,6 +284,7 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
         cacheEntry.incrementUsages();
       }
 
+      cacheEntry.acquireExclusiveLock();
       return cacheEntry;
     } finally {
       if (sessionStoragePerformanceStatistic != null) {
@@ -287,22 +304,27 @@ public class ODirectMemoryOnlyDiskCache extends OAbstractWriteCache implements O
 
   @Override
   public void releaseFromWrite(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    cacheEntry.releaseExclusiveLock();
+
     doRelease(cacheEntry);
   }
 
   @Override
   public void releaseFromRead(OCacheEntry cacheEntry, OWriteCache writeCache) {
+    cacheEntry.releaseSharedLock();
+
     doRelease(cacheEntry);
   }
 
   @Override
-  public void updateDirtyPagesTable(long fileId, long pageIndex) throws IOException {
+  public void updateDirtyPagesTable(OCachePointer pointer) throws IOException {
   }
 
   private void doRelease(OCacheEntry cacheEntry) {
     synchronized (cacheEntry) {
       cacheEntry.decrementUsages();
-      assert cacheEntry.getUsagesCount() > 0 || !cacheEntry.isLockAcquiredByCurrentThread();
+      assert cacheEntry.getUsagesCount() > 0 || cacheEntry.getCachePointer().getSharedBuffer() == null || !cacheEntry
+          .isLockAcquiredByCurrentThread();
     }
   }
 

@@ -49,6 +49,8 @@ public class OCachePointer {
   private final ByteBuffer      buffer;
   private final OByteBufferPool bufferPool;
 
+  private volatile boolean inWriteCache;
+
   private final ThreadLocal<ByteBuffer> threadLocalBuffer = new ThreadLocal<ByteBuffer>() {
     @Override
     protected ByteBuffer initialValue() {
@@ -72,6 +74,14 @@ public class OCachePointer {
 
     this.fileId = fileId;
     this.pageIndex = pageIndex;
+  }
+
+  public boolean isInWriteCache() {
+    return inWriteCache;
+  }
+
+  public void setInWriteCache(boolean inWriteCache) {
+    this.inWriteCache = inWriteCache;
   }
 
   public void setWritersListener(WritersListener writersListener) {
