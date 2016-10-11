@@ -22,12 +22,9 @@ package com.orientechnologies.orient.core.storage.cache;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.orientechnologies.common.directmemory.OByteBufferPool;
-import com.orientechnologies.orient.core.storage.impl.local.paginated.wal.OLogSequenceNumber;
 
 /**
  * @author Andrey Lomakin
@@ -67,6 +64,8 @@ public class OCachePointer {
 
   private final long fileId;
   private final long pageIndex;
+
+  private long version;
 
   public OCachePointer(final ByteBuffer buffer, final OByteBufferPool bufferPool, final long fileId, final long pageIndex) {
     this.buffer = buffer;
@@ -160,6 +159,7 @@ public class OCachePointer {
     incrementReferrer();
   }
 
+
   public void decrementWritersReferrer() {
     long readersWriters = readersWritersReferrer.get();
     int readers = getReaders(readersWriters);
@@ -219,10 +219,16 @@ public class OCachePointer {
 
   public void acquireExclusiveLock() {
     readWriteLock.writeLock().lock();
+    version++;
   }
 
   public boolean tryAcquireExclusiveLock() {
-    return readWriteLock.writeLock().tryLock();
+    final boolean result = readWriteLock.writeLock().tryLock();
+
+    if (result)
+      version++;
+
+    return result;
   }
 
   public void releaseExclusiveLock() {
@@ -288,6 +294,10 @@ public class OCachePointer {
 
   private int getWriters(long readersWriters) {
     return (int) (readersWriters >>> WRITERS_OFFSET);
+  }
+
+  public long getVersion() {
+    return version;
   }
 
   public interface WritersListener {
