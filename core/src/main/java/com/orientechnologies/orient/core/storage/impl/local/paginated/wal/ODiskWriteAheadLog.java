@@ -986,6 +986,9 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
     freeSpace = walLocation.getFreeSpace();
 
     if (freeSpace < freeSpaceLimit) {
+      OLogManager.instance().error(this, "Free space is " + freeSpace + " minimum free space is " + freeSpaceLimit +
+          " force sync will be called");
+
       for (WeakReference<OLowDiskSpaceListener> listenerWeakReference : lowDiskSpaceListeners) {
         final OLowDiskSpaceListener lowDiskSpaceListener = listenerWeakReference.get();
 

@@ -4181,6 +4181,8 @@ public abstract class OAbstractPaginatedStorage extends OStorageAbstract
       if (checkpointInProgress.compareAndSet(false, true)) {
         try {
           if (writeCache.checkLowDiskSpace()) {
+
+            OLogManager.instance().error(this, "Not enough disk space, force sync will be called");
             synch();
 
             if (writeCache.checkLowDiskSpace()) {
