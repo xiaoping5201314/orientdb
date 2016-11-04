@@ -47,6 +47,7 @@ public class OCachePointer {
   private final OByteBufferPool bufferPool;
 
   private volatile boolean inWriteCache;
+  private volatile boolean notFlushed;
 
   private final ThreadLocal<ByteBuffer> threadLocalBuffer = new ThreadLocal<ByteBuffer>() {
     @Override
@@ -73,6 +74,14 @@ public class OCachePointer {
 
     this.fileId = fileId;
     this.pageIndex = pageIndex;
+  }
+
+  public boolean isNotFlushed() {
+    return notFlushed;
+  }
+
+  public void setNotFlushed(boolean notFlushed) {
+    this.notFlushed = notFlushed;
   }
 
   public boolean isInWriteCache() {
@@ -158,7 +167,6 @@ public class OCachePointer {
 
     incrementReferrer();
   }
-
 
   public void decrementWritersReferrer() {
     long readersWriters = readersWritersReferrer.get();

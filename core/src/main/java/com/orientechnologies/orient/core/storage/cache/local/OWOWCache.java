@@ -98,6 +98,18 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final ConcurrentHashMap<PageKey, OLogSequenceNumber> dirtyPages = new ConcurrentHashMap<PageKey, OLogSequenceNumber>();
 
+  /**
+   * Amount of pages which were booked in file but were not flushed yet.
+   *
+   * In file systems like ext3 for example it is not enough to set size of the file to guarantee that subsequent write
+   * inside of already allocated file range will not cause not enough free space exception. Such strange files are called sparce files.
+   *
+   * When you change size of the sparse file amount of available free space on disk is not change and can be occupied by subsequent writes
+   * to other files. So to calculate free space which is really consumed by system
+   */
+  private final AtomicLong countOfNotFlushedPages = new AtomicLong();
+  private final AtomicLong amountOfNewPagesAdded  = new AtomicLong();
+
   private final ODistributedCounter writeCacheSize          = new ODistributedCounter();
   private final ODistributedCounter exclusiveWriteCacheSize = new ODistributedCounter();
   private final ODistributedCounter cacheOverflowCount      = new ODistributedCounter();
@@ -108,7 +120,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   private final boolean        syncOnPageFlush;
   private final int            pageSize;
   private final OWriteAheadLog writeAheadLog;
-  private final AtomicLong amountOfNewPagesAdded = new AtomicLong();
 
   private final OPartitionedLockManager<PageKey> lockManager = new OPartitionedLockManager<PageKey>();
   private final OLocalPaginatedStorage storageLocal;
@@ -274,16 +285,17 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       listeners.remove(ref);
   }
 
-  private void freeSpaceCheckAfterNewPageAdd() {
-    final long newPagesAdded = amountOfNewPagesAdded.incrementAndGet();
+  private void freeSpaceCheckAfterNewPageAdd(int pagesAdded) {
+    final long newPagesAdded = amountOfNewPagesAdded.addAndGet(pagesAdded);
     final long lastSpaceCheck = lastDiskSpaceCheck.get();
 
     if (newPagesAdded - lastSpaceCheck > diskSizeCheckInterval || lastSpaceCheck == 0) {
       final File storageDir = new File(storagePath);
 
       final long freeSpace = storageDir.getFreeSpace();
+      final long notFlushedSpace = countOfNotFlushedPages.get() * pageSize;
 
-      if (freeSpace < freeSpaceLimit)
+      if (freeSpace - notFlushedSpace < freeSpaceLimit)
         callLowSpaceListeners(new OLowDiskSpaceInformation(freeSpace, freeSpaceLimit));
 
       lastDiskSpaceCheck.lazySet(newPagesAdded);
@@ -540,7 +552,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     final File storageDir = new File(storagePath);
 
     final long freeSpace = storageDir.getFreeSpace();
-    return freeSpace < freeSpaceLimit;
+    final long notFlushedSpace = countOfNotFlushedPages.get() * pageSize;
+
+    return freeSpace - notFlushedSpace < freeSpaceLimit;
   }
 
   @Override
@@ -631,18 +645,13 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     filesLock.acquireReadLock();
     try {
       final PageKey pageKey = new PageKey(intId, pageIndex);
+
       Lock groupLock = lockManager.acquireExclusiveLock(pageKey);
       try {
         final OCachePointer pagePointer = writeCachePages.get(pageKey);
 
         if (pagePointer == null) {
-          writeCachePages.put(pageKey, dataPointer);
-
-          writeCacheSize.increment();
-
-          dataPointer.setWritersListener(this);
-          dataPointer.incrementWritersReferrer();
-          dataPointer.setInWriteCache(true);
+          doPutInCache(dataPointer, pageKey);
         } else
           assert pagePointer.equals(dataPointer);
 
@@ -659,6 +668,16 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     } finally {
       filesLock.releaseReadLock();
     }
+  }
+
+  private void doPutInCache(OCachePointer dataPointer, PageKey pageKey) {
+    writeCachePages.put(pageKey, dataPointer);
+
+    writeCacheSize.increment();
+
+    dataPointer.setWritersListener(this);
+    dataPointer.incrementWritersReferrer();
+    dataPointer.setInWriteCache(true);
   }
 
   @Override
@@ -687,49 +706,123 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     filesLock.acquireReadLock();
     try {
-      final PageKey[] pageKeys = new PageKey[pageCount];
-      for (int i = 0; i < pageCount; i++) {
-        pageKeys[i] = new PageKey(intId, startPageIndex + i);
-      }
+      //check if page already present in write cache
+      OCachePointer pagePointer = writeCachePages.get(new PageKey(intId, startPageIndex));
 
-      Lock[] pageLocks = lockManager.acquireSharedLocksInBatch(pageKeys);
-      try {
-        OCachePointer pagePointer = writeCachePages.get(pageKeys[0]);
+      if (pagePointer == null) {
+        //load requested page and preload requested amount of pages
+        final OCachePointer pagePointers[] = loadFileContent(intId, startPageIndex, pageCount);
 
-        if (pagePointer == null) {
-          final OCachePointer pagePointers[] = cacheFileContent(intId, startPageIndex, pageCount, addNewPages, cacheHit);
-
+        if (pagePointers != null) {
           if (pagePointers.length == 0)
             return pagePointers;
 
-          for (int n = 0; n < pagePointers.length; n++) {
-            pagePointers[n].incrementReadersReferrer();
+          PageKey[] pageKeys = new PageKey[pagePointers.length];
+          for (int i = 0; i < pagePointers.length; i++) {
+            pageKeys[i] = new PageKey(intId, startPageIndex + i);
+          }
 
-            if (n > 0) {
-              pagePointer = writeCachePages.get(pageKeys[n]);
+          Lock[] pageLocks = lockManager.acquireSharedLocksInBatch(pageKeys);
+          try {
+            for (int n = 0; n < pagePointers.length; n++) {
+              pagePointers[n].incrementReadersReferrer();
 
-              assert pageKeys[n].pageIndex == pagePointers[n].getPageIndex();
+              if (n > 0) {
+                pagePointer = writeCachePages.get(pageKeys[n]);
 
-              if (pagePointer != null) {
-                pagePointers[n].decrementReadersReferrer();
-                pagePointers[n] = pagePointer;
-                pagePointers[n].incrementReadersReferrer();
+                assert pageKeys[n].pageIndex == pagePointers[n].getPageIndex();
+
+                //if page already exists in cache we should drop already loaded page and load cache page instead
+                if (pagePointer != null) {
+                  pagePointers[n].decrementReadersReferrer();
+                  pagePointers[n] = pagePointer;
+                  pagePointers[n].incrementReadersReferrer();
+                }
               }
+            }
+          } finally {
+            for (Lock pageLock : pageLocks) {
+              pageLock.unlock();
             }
           }
 
           return pagePointers;
-        }
+        } else {
+          //we do not allow to add new pages
+          if (!addNewPages)
+            return new OCachePointer[0];
 
-        pagePointer.incrementReadersReferrer();
+          final OClosableEntry<Long, OFileClassic> entry = files.acquire(fileId);
+          try {
+            final OFileClassic fileClassic = entry.get();
+
+            long startAllocationIndex = fileClassic.getFileSize() / pageSize;
+            long stopAllocationIndex = startPageIndex;
+
+            final PageKey[] allocationPageKeys = new PageKey[(int) (stopAllocationIndex - startAllocationIndex + 1)];
+
+            for (long pageIndex = startAllocationIndex; pageIndex <= stopAllocationIndex; pageIndex++) {
+              int index = (int) (pageIndex - startAllocationIndex);
+              allocationPageKeys[index] = new PageKey(intId, pageIndex);
+            }
+
+            Lock[] locks = lockManager.acquireExclusiveLocksInBatch(allocationPageKeys);
+            try {
+              final long fileSize = fileClassic.getFileSize();
+              final long spaceToAllocate = (stopAllocationIndex * pageSize - fileSize + pageSize);
+
+              OCachePointer resultPointer = null;
+
+              if (spaceToAllocate > 0) {
+                fileClassic.allocateSpace(spaceToAllocate);
+                startAllocationIndex = fileClassic.getFileSize() / pageSize;
+
+                for (long index = startAllocationIndex; index <= stopAllocationIndex; index++) {
+                  final ByteBuffer buffer = bufferPool.acquireDirect(false);
+                  final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, fileId, index);
+                  cachePointer.setNotFlushed(true);
+
+                  countOfNotFlushedPages.incrementAndGet();
+
+                  doPutInCache(cachePointer, new PageKey(intId, index));
+
+                  if (index == startPageIndex) {
+                    resultPointer = cachePointer;
+                  }
+                }
+
+                freeSpaceCheckAfterNewPageAdd((int) (stopAllocationIndex - startAllocationIndex + 1));
+              }
+
+              if (resultPointer != null) {
+                resultPointer.incrementReadersReferrer();
+
+                cacheHit.setValue(true);
+
+                return new OCachePointer[] { resultPointer };
+              }
+            } finally {
+              for (Lock lock : locks) {
+                lock.unlock();
+              }
+            }
+          } finally {
+            files.release(entry);
+          }
+
+          return load(fileId, startPageIndex, pageCount, true, cacheHit);
+        }
+      } else {
+        Lock lock = lockManager.acquireSharedLock(new PageKey(intId, startPageIndex));
+        try {
+          pagePointer.incrementReadersReferrer();
+        } finally {
+          lock.unlock();
+        }
 
         cacheHit.setValue(true);
 
         return new OCachePointer[] { pagePointer };
-      } finally {
-        for (Lock lock : pageLocks) {
-          lock.unlock();
-        }
       }
     } finally {
       filesLock.releaseReadLock();
@@ -1260,10 +1353,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
   }
 
-  private OCachePointer[] cacheFileContent(final int intId, final long startPageIndex, final int pageCount,
-      final boolean addNewPages, OModifiableBoolean cacheHit) throws IOException {
-
+  private OCachePointer[] loadFileContent(final int intId, final long startPageIndex, final int pageCount) throws IOException {
     final long fileId = composeFileId(id, intId);
+
     final OClosableEntry<Long, OFileClassic> entry = files.acquire(fileId);
     try {
       final OFileClassic fileClassic = entry.get();
@@ -1323,23 +1415,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           if (sessionStoragePerformanceStatistic != null) {
             sessionStoragePerformanceStatistic.stopPageReadFromFileTimer(pagesRead);
           }
-
         }
-      } else if (addNewPages) {
-        final int space = (int) (firstPageEndPosition - fileClassic.getFileSize());
-
-        if (space > 0)
-          fileClassic.allocateSpace(space);
-
-        freeSpaceCheckAfterNewPageAdd();
-
-        final ByteBuffer buffer = bufferPool.acquireDirect(true);
-        final OCachePointer dataPointer = new OCachePointer(buffer, bufferPool, fileId, startPageIndex);
-
-        cacheHit.setValue(true);
-        return new OCachePointer[] { dataPointer };
       } else
-        return new OCachePointer[0];
+        return null;
     } finally {
       files.release(entry);
     }
@@ -1713,6 +1791,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         } finally {
           pointer.releaseSharedLock();
         }
+
+        if (pointer.isNotFlushed()) {
+          pointer.setNotFlushed(false);
+
+          countOfNotFlushedPages.decrementAndGet();
+        }
       } finally {
         lock.unlock();
       }
@@ -1761,6 +1845,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               pointer.setInWriteCache(false);
             } finally {
               pointer.releaseSharedLock();
+            }
+
+            if (pointer.isNotFlushed()) {
+              pointer.setNotFlushed(false);
+
+              countOfNotFlushedPages.decrementAndGet();
             }
 
             copy.position(0);
@@ -1847,6 +1937,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           lockManager.releaseLock(groupLock);
         }
 
+        if (pagePointer.isNotFlushed()) {
+          pagePointer.setNotFlushed(false);
+
+          countOfNotFlushedPages.decrementAndGet();
+        }
+
         writeCacheSize.decrement();
       }
 
@@ -1899,6 +1995,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           entryIterator.remove();
         } finally {
           lockManager.releaseLock(groupLock);
+        }
+
+        if (pagePointer.isNotFlushed()) {
+          pagePointer.setNotFlushed(false);
+
+          countOfNotFlushedPages.decrementAndGet();
         }
       }
 

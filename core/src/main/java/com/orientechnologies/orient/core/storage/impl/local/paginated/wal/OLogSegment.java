@@ -134,13 +134,9 @@ final class OLogSegment implements Comparable<OLogSegment> {
     @Override
     public void run() {
       try {
-        try {
-          OLogSegment.this.commitLog();
-        } catch (Throwable e) {
-          OLogManager.instance().error(this, "Error during WAL background flush", e);
-        }
-      } finally {
-        writeAheadLog.checkFreeSpace();
+        OLogSegment.this.commitLog();
+      } catch (Throwable e) {
+        OLogManager.instance().error(this, "Error during WAL background flush", e);
       }
     }
   }
@@ -154,6 +150,7 @@ final class OLogSegment implements Comparable<OLogSegment> {
       statistic.startWALFlushTimer();
     try {
       flushNewData = false;
+
       List<OLogRecord> toFlush;
       try {
         cacheLock.lock();
@@ -165,8 +162,10 @@ final class OLogSegment implements Comparable<OLogSegment> {
       } finally {
         cacheLock.unlock();
       }
+
       if (toFlush.isEmpty())
         return;
+
       byte[] pageContent = new byte[OWALPage.PAGE_SIZE];
 
       OLogRecord first = toFlush.get(0);
@@ -245,7 +244,9 @@ final class OLogSegment implements Comparable<OLogSegment> {
           fileLock.unlock();
         }
       }
+
       this.writeAheadLog.setFlushedLsn(lsn);
+      this.writeAheadLog.checkFreeSpace();
     } finally {
       if (statistic != null)
         statistic.stopWALFlushTimer();
