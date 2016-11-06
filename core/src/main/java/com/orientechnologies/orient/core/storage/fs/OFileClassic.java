@@ -507,8 +507,13 @@ public class OFileClassic implements OFile, OClosableItem {
 
         return allocationDiff;
       } catch (IOException e) {
-        OLogManager.instance()
-            .error(this, "Error during write of data for file '" + getName() + "' " + attempts + "-th attempt", e);
+        File parent = osFile.getParentFile();
+        final long freeSpace = parent.getFreeSpace();
+        final long usableSpace = parent.getUsableSpace();
+
+        OLogManager.instance().error(this,
+            "Error during write of data for file '" + getName() + "' " + attempts + "-th attempt, free space " + freeSpace
+                + ", usable space " + usableSpace, e);
         reopenFile(attempts, e);
       }
     }

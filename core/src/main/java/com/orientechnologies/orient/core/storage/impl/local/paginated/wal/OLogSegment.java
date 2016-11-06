@@ -136,7 +136,13 @@ final class OLogSegment implements Comparable<OLogSegment> {
       try {
         OLogSegment.this.commitLog();
       } catch (Throwable e) {
-        OLogManager.instance().error(this, "Error during WAL background flush", e);
+        File parent = file.getParentFile();
+
+        final long freeSpace = parent.getFreeSpace();
+        final long usableSpace = parent.getUsableSpace();
+
+        OLogManager.instance()
+            .error(this, "Error during WAL background flush, free space " + freeSpace + ", usable space " + usableSpace, e);
       }
     }
   }

@@ -100,10 +100,10 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   /**
    * Amount of pages which were booked in file but were not flushed yet.
-   *
+   * <p>
    * In file systems like ext3 for example it is not enough to set size of the file to guarantee that subsequent write
    * inside of already allocated file range will not cause not enough free space exception. Such strange files are called sparce files.
-   *
+   * <p>
    * When you change size of the sparse file amount of available free space on disk is not change and can be occupied by subsequent writes
    * to other files. So to calculate free space which is really consumed by system
    */
@@ -1761,6 +1761,17 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     try {
       OFileClassic file = fileEntry.get();
       file.write(firstPageIndex * pageSize, buffers);
+    } catch (IOException e) {
+      final File storageDir = new File(storagePath);
+
+      final long freeSpace = storageDir.getFreeSpace();
+      final long usableSpace = storageDir.getUsableSpace();
+      final long notFlushedSpace = countOfNotFlushedPages.get() * pageSize;
+
+      OLogManager.instance()
+          .error(this, "Free space " + freeSpace + " not flushed space " + notFlushedSpace + " usable space " + usableSpace);
+
+      throw e;
     } finally {
       files.release(fileEntry);
     }
