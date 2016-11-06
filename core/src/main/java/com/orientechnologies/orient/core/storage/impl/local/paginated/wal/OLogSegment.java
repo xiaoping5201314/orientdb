@@ -143,6 +143,7 @@ final class OLogSegment implements Comparable<OLogSegment> {
 
         OLogManager.instance()
             .error(this, "Error during WAL background flush, free space " + freeSpace + ", usable space " + usableSpace, e);
+
       }
     }
   }

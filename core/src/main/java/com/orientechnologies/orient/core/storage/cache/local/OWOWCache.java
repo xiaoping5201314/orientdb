@@ -292,7 +292,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     if (newPagesAdded - lastSpaceCheck > diskSizeCheckInterval || lastSpaceCheck == 0) {
       final File storageDir = new File(storagePath);
 
-      final long freeSpace = storageDir.getFreeSpace();
+      final long freeSpace = storageDir.getUsableSpace();
       final long notFlushedSpace = countOfNotFlushedPages.get() * pageSize;
 
       if (freeSpace - notFlushedSpace < freeSpaceLimit)
@@ -551,7 +551,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   public boolean checkLowDiskSpace() {
     final File storageDir = new File(storagePath);
 
-    final long freeSpace = storageDir.getFreeSpace();
+    final long freeSpace = storageDir.getUsableSpace();
     final long notFlushedSpace = countOfNotFlushedPages.get() * pageSize;
 
     return freeSpace - notFlushedSpace < freeSpaceLimit;
