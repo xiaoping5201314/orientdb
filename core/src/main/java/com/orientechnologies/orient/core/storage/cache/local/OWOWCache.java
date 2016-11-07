@@ -303,7 +303,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       lastDiskSpaceCheck.lazySet(newPagesAdded);
 
       long nanoTime = System.nanoTime();
-      if ((lastCheck - nanoTime) < 10000000000L) {
+      if (lastCheck == 0 || (lastCheck - nanoTime) > 10000000000L) {
         System.out.println("Free space " + freeSpace + " not flushed space " + notFlushedSpace);
         lastCheck = nanoTime;
       }
