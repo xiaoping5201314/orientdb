@@ -98,7 +98,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final ConcurrentHashMap<PageKey, OLogSequenceNumber> dirtyPages = new ConcurrentHashMap<PageKey, OLogSequenceNumber>();
 
-  private long lastCheck = 0;
+  private volatile long lastCheck = 0;
 
   /**
    * Amount of pages which were booked in file but were not flushed yet.
@@ -303,8 +303,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       lastDiskSpaceCheck.lazySet(newPagesAdded);
 
       long nanoTime = System.nanoTime();
-      if ((lastSpaceCheck - nanoTime) < 10000000000L) {
+      if ((lastCheck - nanoTime) < 10000000000L) {
         System.out.println("Free space " + freeSpace + " not flushed space " + notFlushedSpace);
+        lastCheck = nanoTime;
       }
     }
   }
