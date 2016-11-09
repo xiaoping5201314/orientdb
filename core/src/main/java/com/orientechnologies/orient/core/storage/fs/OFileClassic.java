@@ -82,6 +82,8 @@ public class OFileClassic implements OFile, OClosableItem {
 
   @Override
   public long allocateSpace(long size) throws IOException {
+    assert size >= 0;
+
     acquireWriteLock();
     try {
       assert channel.size() - HEADER_SIZE == this.size;

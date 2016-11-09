@@ -714,29 +714,49 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     filesLock.acquireReadLock();
     try {
-      //check if page already present in write cache
-      OCachePointer pagePointer = writeCachePages.get(new PageKey(intId, startPageIndex));
+      //first check that requested page is already cached so we do not need to load it from file
+      final PageKey startPageKey = new PageKey(intId, startPageIndex);
+      final Lock startPageLock = lockManager.acquireSharedLock(startPageKey);
 
-      if (pagePointer == null) {
-        //load requested page and preload requested amount of pages
-        final OCachePointer pagePointers[] = loadFileContent(intId, startPageIndex, pageCount);
+      //check if page already presented in write cache
+      final OCachePointer startPagePointer = writeCachePages.get(startPageKey);
 
-        if (pagePointers != null) {
-          if (pagePointers.length == 0)
-            return pagePointers;
+      //page is not cached load it from file
+      if (startPagePointer == null) {
+        //load it from file and preload requested pages
+        //there is small optimization
+        //if we only need single page no need to release already locked page
+        Lock[] pageLocks;
+        PageKey[] pageKeys;
 
-          PageKey[] pageKeys = new PageKey[pagePointers.length];
-          for (int i = 0; i < pagePointers.length; i++) {
+        if (pageCount > 1) {
+          startPageLock.unlock();
+
+          pageKeys = new PageKey[pageCount];
+          for (int i = 0; i < pageCount; i++) {
             pageKeys[i] = new PageKey(intId, startPageIndex + i);
           }
 
-          Lock[] pageLocks = lockManager.acquireSharedLocksInBatch(pageKeys);
-          try {
+          pageLocks = lockManager.acquireSharedLocksInBatch(pageKeys);
+        } else {
+          pageLocks = new Lock[] { startPageLock };
+          pageKeys = new PageKey[] { startPageKey };
+        }
+
+        OCachePointer pagePointers[] = null;
+        try {
+          //load requested page and preload requested amount of pages
+          pagePointers = loadFileContent(intId, startPageIndex, pageCount);
+
+          if (pagePointers != null) {
+            if (pagePointers.length == 0)
+              return pagePointers;
+
             for (int n = 0; n < pagePointers.length; n++) {
               pagePointers[n].incrementReadersReferrer();
 
               if (n > 0) {
-                pagePointer = writeCachePages.get(pageKeys[n]);
+                OCachePointer pagePointer = writeCachePages.get(pageKeys[n]);
 
                 assert pageKeys[n].pageIndex == pagePointers[n].getPageIndex();
 
@@ -748,89 +768,100 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
                 }
               }
             }
-          } finally {
-            for (Lock pageLock : pageLocks) {
-              pageLock.unlock();
-            }
+
+            return pagePointers;
           }
 
-          return pagePointers;
-        } else {
-          //we do not allow to add new pages
-          if (!addNewPages)
-            return new OCachePointer[0];
-
-          final OClosableEntry<Long, OFileClassic> entry = files.acquire(fileId);
-          try {
-            final OFileClassic fileClassic = entry.get();
-
-            long startAllocationIndex = fileClassic.getFileSize() / pageSize;
-            long stopAllocationIndex = startPageIndex;
-
-            final PageKey[] allocationPageKeys = new PageKey[(int) (stopAllocationIndex - startAllocationIndex + 1)];
-
-            for (long pageIndex = startAllocationIndex; pageIndex <= stopAllocationIndex; pageIndex++) {
-              int index = (int) (pageIndex - startAllocationIndex);
-              allocationPageKeys[index] = new PageKey(intId, pageIndex);
-            }
-
-            Lock[] locks = lockManager.acquireExclusiveLocksInBatch(allocationPageKeys);
-            try {
-              final long fileSize = fileClassic.getFileSize();
-              final long spaceToAllocate = (stopAllocationIndex * pageSize - fileSize + pageSize);
-
-              OCachePointer resultPointer = null;
-
-              if (spaceToAllocate > 0) {
-                fileClassic.allocateSpace(spaceToAllocate);
-                startAllocationIndex = fileClassic.getFileSize() / pageSize;
-
-                for (long index = startAllocationIndex; index <= stopAllocationIndex; index++) {
-                  final ByteBuffer buffer = bufferPool.acquireDirect(false);
-                  final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, fileId, index);
-                  cachePointer.setNotFlushed(true);
-
-                  countOfNotFlushedPages.incrementAndGet();
-
-                  doPutInCache(cachePointer, new PageKey(intId, index));
-
-                  if (index == startPageIndex) {
-                    resultPointer = cachePointer;
-                  }
-                }
-
-                freeSpaceCheckAfterNewPageAdd((int) (stopAllocationIndex - startAllocationIndex + 1));
-              }
-
-              if (resultPointer != null) {
-                resultPointer.incrementReadersReferrer();
-
-                cacheHit.setValue(true);
-
-                return new OCachePointer[] { resultPointer };
-              }
-            } finally {
-              for (Lock lock : locks) {
-                lock.unlock();
-              }
-            }
-          } finally {
-            files.release(entry);
-          }
-
-          return load(fileId, startPageIndex, pageCount, true, cacheHit);
-        }
-      } else {
-        Lock lock = lockManager.acquireSharedLock(new PageKey(intId, startPageIndex));
-        try {
-          pagePointer.incrementReadersReferrer();
         } finally {
-          lock.unlock();
+          for (Lock pageLock : pageLocks) {
+            pageLock.unlock();
+          }
         }
+
+        //requested page is out of file range
+        //we need to allocate pages on the disk first
+        if (!addNewPages)
+          return new OCachePointer[0];
+
+        final OClosableEntry<Long, OFileClassic> entry = files.acquire(fileId);
+        try {
+          final OFileClassic fileClassic = entry.get();
+
+          long startAllocationIndex = fileClassic.getFileSize() / pageSize;
+          long stopAllocationIndex = startPageIndex;
+
+          final PageKey[] allocationPageKeys = new PageKey[(int) (stopAllocationIndex - startAllocationIndex + 1)];
+
+          for (long pageIndex = startAllocationIndex; pageIndex <= stopAllocationIndex; pageIndex++) {
+            int index = (int) (pageIndex - startAllocationIndex);
+            allocationPageKeys[index] = new PageKey(intId, pageIndex);
+          }
+
+          //use exclusive locks to prevent to have duplication of pointers
+          //when page is loaded from file because space is already allocated
+          //but it the same moment another page for the same index is added to the write cache
+          Lock[] locks = lockManager.acquireExclusiveLocksInBatch(allocationPageKeys);
+          try {
+            final long fileSize = fileClassic.getFileSize();
+            final long spaceToAllocate = ((stopAllocationIndex + 1) * pageSize - fileSize);
+
+            OCachePointer resultPointer = null;
+
+            if (spaceToAllocate > 0) {
+              fileClassic.allocateSpace(spaceToAllocate);
+              startAllocationIndex = fileSize / pageSize;
+
+              for (long index = startAllocationIndex; index <= stopAllocationIndex; index++) {
+                final ByteBuffer buffer = bufferPool.acquireDirect(false);
+                final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, fileId, index);
+                cachePointer.setNotFlushed(true);
+
+                countOfNotFlushedPages.incrementAndGet();
+
+                //item only in write cache till we will not return
+                //it to read cache so we increment exclusive size by one
+                //otherwise call of write listener inside pointer may set exclusive size to negative value
+                exclusiveWriteCacheSize.increment();
+
+                doPutInCache(cachePointer, new PageKey(intId, index));
+
+                if (index == startPageIndex) {
+                  resultPointer = cachePointer;
+                }
+              }
+
+              //we check is it enough space on disk to continue to write data on it
+              //otherwise we switch storage in read-only mode
+              freeSpaceCheckAfterNewPageAdd((int) (stopAllocationIndex - startAllocationIndex + 1));
+            }
+
+            if (resultPointer != null) {
+              resultPointer.incrementReadersReferrer();
+
+              cacheHit.setValue(true);
+
+              return new OCachePointer[] { resultPointer };
+            }
+          } finally {
+            for (Lock lock : locks) {
+              lock.unlock();
+            }
+          }
+        } finally {
+          files.release(entry);
+        }
+
+        //this is case when we allocated space but requested page was outside of allocated space
+        //in such case we read it again
+        return load(fileId, startPageIndex, pageCount, true, cacheHit);
+
+      } else {
+        startPagePointer.incrementReadersReferrer();
+        startPageLock.unlock();
 
         cacheHit.setValue(true);
 
-        return new OCachePointer[] { pagePointer };
+        return new OCachePointer[] { startPagePointer };
       }
     } finally {
       filesLock.releaseReadLock();
