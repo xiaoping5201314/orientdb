@@ -812,7 +812,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               startAllocationIndex = fileSize / pageSize;
 
               for (long index = startAllocationIndex; index <= stopAllocationIndex; index++) {
-                final ByteBuffer buffer = bufferPool.acquireDirect(false);
+                final ByteBuffer buffer = bufferPool.acquireDirect(true);
                 final OCachePointer cachePointer = new OCachePointer(buffer, bufferPool, fileId, index);
                 cachePointer.setNotFlushed(true);
 
