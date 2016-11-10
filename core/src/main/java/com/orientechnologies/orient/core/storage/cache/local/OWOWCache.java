@@ -98,25 +98,38 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final ConcurrentHashMap<PageKey, OLogSequenceNumber> dirtyPages = new ConcurrentHashMap<PageKey, OLogSequenceNumber>();
 
-  private volatile long lastCheck = 0;
-
   /**
    * Amount of pages which were booked in file but were not flushed yet.
    * <p>
    * In file systems like ext3 for example it is not enough to set size of the file to guarantee that subsequent write
-   * inside of already allocated file range will not cause not enough free space exception. Such strange files are called sparce files.
+   * inside of already allocated file range will not cause "not enough free space" exception.
+   * Such strange files are called sparse files.
    * <p>
-   * When you change size of the sparse file amount of available free space on disk is not change and can be occupied by subsequent writes
-   * to other files. So to calculate free space which is really consumed by system
+   * When you change size of the sparse file amount of available free space on disk is not changed and can be occupied by subsequent writes
+   * to other files. So to calculate free space which is really consumed by system we calculate amount of pages which were booked
+   * but not written yet on disk.
    */
-  private final AtomicLong countOfNotFlushedPages = new AtomicLong();
-  private final AtomicLong amountOfNewPagesAdded  = new AtomicLong();
+  private final AtomicLong          countOfNotFlushedPages = new AtomicLong();
+
+  /**
+   * This counter is need for "free space" check implementation.
+   * Once amount of added pages is reached some threshold, amount of free space available on disk will be checked.
+   */
+  private final ODistributedCounter amountOfNewPagesAdded  = new ODistributedCounter();
 
   private final ODistributedCounter writeCacheSize          = new ODistributedCounter();
   private final ODistributedCounter exclusiveWriteCacheSize = new ODistributedCounter();
   private final ODistributedCounter cacheOverflowCount      = new ODistributedCounter();
 
+  /**
+   * Serializer for file names are used inside of storage.
+   */
   private final OBinarySerializer<String>                    stringSerializer;
+
+  /**
+   * Container for all files instances are used in storage.
+   * Once amount of open files reaches limit rarely used files will be automatically closed.
+   */
   private final OClosableLinkedContainer<Long, OFileClassic> files;
 
   private final boolean        syncOnPageFlush;
@@ -288,7 +301,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   }
 
   private void freeSpaceCheckAfterNewPageAdd(int pagesAdded) {
-    final long newPagesAdded = amountOfNewPagesAdded.addAndGet(pagesAdded);
+    amountOfNewPagesAdded.add(pagesAdded);
+
+    final long newPagesAdded = amountOfNewPagesAdded.get();
     final long lastSpaceCheck = lastDiskSpaceCheck.get();
 
     if (newPagesAdded - lastSpaceCheck > diskSizeCheckInterval || lastSpaceCheck == 0) {
@@ -301,12 +316,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         callLowSpaceListeners(new OLowDiskSpaceInformation(freeSpace, freeSpaceLimit));
 
       lastDiskSpaceCheck.lazySet(newPagesAdded);
-
-      long nanoTime = System.nanoTime();
-      if (lastCheck == 0 || (nanoTime - lastCheck) > 10000000000L) {
-        System.out.println("Free space " + freeSpace + " not flushed space " + notFlushedSpace);
-        lastCheck = nanoTime;
-      }
     }
   }
 
@@ -725,7 +734,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       if (startPagePointer == null) {
         //load it from file and preload requested pages
         //there is small optimization
-        //if we only need single page no need to release already locked page
+        //if we need single page no need to release already locked page
         Lock[] pageLocks;
         PageKey[] pageKeys;
 
@@ -743,7 +752,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           pageKeys = new PageKey[] { startPageKey };
         }
 
-        OCachePointer pagePointers[] = null;
+        OCachePointer pagePointers[];
         try {
           //load requested page and preload requested amount of pages
           pagePointers = loadFileContent(intId, startPageIndex, pageCount);
