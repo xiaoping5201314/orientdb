@@ -427,6 +427,10 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
    * @throws IOException
    */
   private OLogSequenceNumber internalLog(OWALRecord record, byte[] recordContent) throws IOException {
+    OLogSegment segmentToDeInit = null;
+
+    final OLogSequenceNumber lsn;
+
     syncObject.lock();
     try {
       checkForClose();
@@ -446,7 +450,8 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       OLogSegment last = logSegments.get(logSegments.size() - 1);
       long lastSize = last.filledUpTo();
 
-      final OLogSequenceNumber lsn = last.logRecord(recordContent);
+      lsn = last.logRecord(recordContent);
+
       record.setLsn(lsn);
       end = lsn;
 
@@ -471,7 +476,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
 
         if (record instanceof OAtomicUnitEndRecord && activeOperations.size() == 1 || (!(record instanceof OOperationUnitRecord)
             && activeOperations.isEmpty())) {
-          last.stopFlush(true);
+          segmentToDeInit = last;
 
           last = new OLogSegment(this, new File(walLocation, getSegmentName(last.getOrder() + 1)), fileTTL, maxPagesCacheSize,
               performanceStatisticManager);
@@ -497,11 +502,16 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
         }
       }
 
-      return lsn;
-
     } finally {
       syncObject.unlock();
     }
+
+    //put flush of old segment out of the log, so other threads will not wait till the end of flush procedure
+    if (segmentToDeInit != null) {
+      segmentToDeInit.stopFlush(true);
+    }
+
+    return lsn;
   }
 
   @Override
