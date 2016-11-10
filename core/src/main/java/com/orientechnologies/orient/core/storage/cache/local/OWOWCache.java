@@ -1503,14 +1503,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   }
 
   private void preparePageToFlush(final ByteBuffer buffer) throws IOException {
-    if (writeAheadLog != null) {
-      final OLogSequenceNumber lsn = ODurablePage.getLogSequenceNumberFromPage(buffer);
-      final OLogSequenceNumber flushedLSN = writeAheadLog.getFlushedLsn();
-
-      if (flushedLSN == null || flushedLSN.compareTo(lsn) < 0)
-        writeAheadLog.flush();
-    }
-
     final byte[] content = new byte[pageSize];
     buffer.position(0);
     buffer.get(content);
@@ -1520,6 +1512,16 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     buffer.position(0);
     buffer.putLong(MAGIC_NUMBER);
     buffer.putInt(crc32);
+  }
+
+  private void flushWriteCacheTillLSN(final ByteBuffer buffer) {
+    if (writeAheadLog != null) {
+      final OLogSequenceNumber lsn = ODurablePage.getLogSequenceNumberFromPage(buffer);
+      final OLogSequenceNumber flushedLSN = writeAheadLog.getFlushedLsn();
+
+      if (flushedLSN == null || flushedLSN.compareTo(lsn) < 0)
+        writeAheadLog.flush();
+    }
   }
 
   private static final class NameFileIdEntry {
@@ -1760,6 +1762,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
             pointer.releaseSharedLock();
           }
 
+          flushWriteCacheTillLSN(copy);
           copy.position(0);
 
           if (chunk.isEmpty()) {
@@ -1906,13 +1909,15 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
               pointer.releaseSharedLock();
             }
 
+            flushWriteCacheTillLSN(copy);
+            copy.position(0);
+
             if (pointer.isNotFlushed()) {
               pointer.setNotFlushed(false);
 
               countOfNotFlushedPages.decrementAndGet();
             }
 
-            copy.position(0);
             final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
             try {
               final OFileClassic fileClassic = entry.get();

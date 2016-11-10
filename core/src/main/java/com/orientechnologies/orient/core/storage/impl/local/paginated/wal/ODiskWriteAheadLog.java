@@ -357,6 +357,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
   public OLogSequenceNumber logAtomicOperationStartRecord(boolean isRollbackSupported, OOperationUnitId unitId) throws IOException {
     final OSessionStoragePerformanceStatistic statistic = performanceStatisticManager.getSessionPerformanceStatistic();
 
+    final InternalLogResult logResult;
     if (statistic != null)
       statistic.startWALLogRecordTimer();
     try {
@@ -366,12 +367,17 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       try {
         checkForClose();
 
-        final OLogSequenceNumber lsn = internalLog(record, content);
+        logResult = internalLog(record, content);
         activeOperations.add(unitId);
-        return lsn;
+
       } finally {
         syncObject.unlock();
       }
+
+      if (logResult.segmentToStopFlush != null)
+        logResult.segmentToStopFlush.stopFlush(true);
+
+      return logResult.recordLSN;
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(true, false);
@@ -383,6 +389,8 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       OLogSequenceNumber startLsn, Map<String, OAtomicOperationMetadata<?>> atomicOperationMetadata) throws IOException {
     final OSessionStoragePerformanceStatistic statistic = performanceStatisticManager.getSessionPerformanceStatistic();
 
+    final InternalLogResult logResult;
+
     if (statistic != null)
       statistic.startWALLogRecordTimer();
     try {
@@ -392,13 +400,17 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       try {
         checkForClose();
 
-        final OLogSequenceNumber lsn = internalLog(record, content);
+        logResult = internalLog(record, content);
         activeOperations.remove(operationUnitId);
 
-        return lsn;
       } finally {
         syncObject.unlock();
       }
+
+      if (logResult.segmentToStopFlush != null)
+        logResult.segmentToStopFlush.stopFlush(true);
+
+      return logResult.recordLSN;
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(false, true);
@@ -410,7 +422,11 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
     if (statistic != null)
       statistic.startWALLogRecordTimer();
     try {
-      return internalLog(record, OWALRecordsFactory.INSTANCE.toStream(record));
+      final InternalLogResult logResult = internalLog(record, OWALRecordsFactory.INSTANCE.toStream(record));
+      if (logResult.segmentToStopFlush != null)
+        logResult.segmentToStopFlush.stopFlush(true);
+
+      return logResult.recordLSN;
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(false, false);
@@ -426,8 +442,8 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
    * @return
    * @throws IOException
    */
-  private OLogSequenceNumber internalLog(OWALRecord record, byte[] recordContent) throws IOException {
-    OLogSegment segmentToDeInit = null;
+  private InternalLogResult internalLog(OWALRecord record, byte[] recordContent) throws IOException {
+    OLogSegment segmentToStopFlush = null;
 
     final OLogSequenceNumber lsn;
 
@@ -476,7 +492,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
 
         if (record instanceof OAtomicUnitEndRecord && activeOperations.size() == 1 || (!(record instanceof OOperationUnitRecord)
             && activeOperations.isEmpty())) {
-          segmentToDeInit = last;
+          segmentToStopFlush = last;
 
           last = new OLogSegment(this, new File(walLocation, getSegmentName(last.getOrder() + 1)), fileTTL, maxPagesCacheSize,
               performanceStatisticManager);
@@ -506,12 +522,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       syncObject.unlock();
     }
 
-    //put flush of old segment out of the log, so other threads will not wait till the end of flush procedure
-    if (segmentToDeInit != null) {
-      segmentToDeInit.stopFlush(true);
-    }
-
-    return lsn;
+    return new InternalLogResult(lsn, segmentToStopFlush);
   }
 
   @Override
@@ -1010,6 +1021,20 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
 
   public int getCommitDelay() {
     return commitDelay;
+  }
+
+  private static final class InternalLogResult {
+    private final OLogSequenceNumber recordLSN;
+
+    /**
+     * Put flush of old segment out of the log, so other threads will not wait till the end of flush procedure
+     */
+    private final OLogSegment segmentToStopFlush;
+
+    private InternalLogResult(OLogSequenceNumber recordLSN, OLogSegment segmentToStopFlush) {
+      this.recordLSN = recordLSN;
+      this.segmentToStopFlush = segmentToStopFlush;
+    }
   }
 
 }
