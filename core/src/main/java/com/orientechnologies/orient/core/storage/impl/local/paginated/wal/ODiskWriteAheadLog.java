@@ -357,7 +357,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
   public OLogSequenceNumber logAtomicOperationStartRecord(boolean isRollbackSupported, OOperationUnitId unitId) throws IOException {
     final OSessionStoragePerformanceStatistic statistic = performanceStatisticManager.getSessionPerformanceStatistic();
 
-    final InternalLogResult logResult;
+    OLogSequenceNumber lsn;
     if (statistic != null)
       statistic.startWALLogRecordTimer();
     try {
@@ -367,17 +367,14 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       try {
         checkForClose();
 
-        logResult = internalLog(record, content);
+        lsn = internalLog(record, content);
         activeOperations.add(unitId);
 
       } finally {
         syncObject.unlock();
       }
 
-      if (logResult.segmentToStopFlush != null)
-        logResult.segmentToStopFlush.stopFlush(true);
-
-      return logResult.recordLSN;
+      return lsn;
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(true, false);
@@ -389,7 +386,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       OLogSequenceNumber startLsn, Map<String, OAtomicOperationMetadata<?>> atomicOperationMetadata) throws IOException {
     final OSessionStoragePerformanceStatistic statistic = performanceStatisticManager.getSessionPerformanceStatistic();
 
-    final InternalLogResult logResult;
+    final OLogSequenceNumber lsn;
 
     if (statistic != null)
       statistic.startWALLogRecordTimer();
@@ -400,17 +397,14 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       try {
         checkForClose();
 
-        logResult = internalLog(record, content);
+        lsn = internalLog(record, content);
         activeOperations.remove(operationUnitId);
 
       } finally {
         syncObject.unlock();
       }
 
-      if (logResult.segmentToStopFlush != null)
-        logResult.segmentToStopFlush.stopFlush(true);
-
-      return logResult.recordLSN;
+      return lsn;
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(false, true);
@@ -422,11 +416,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
     if (statistic != null)
       statistic.startWALLogRecordTimer();
     try {
-      final InternalLogResult logResult = internalLog(record, OWALRecordsFactory.INSTANCE.toStream(record));
-      if (logResult.segmentToStopFlush != null)
-        logResult.segmentToStopFlush.stopFlush(true);
-
-      return logResult.recordLSN;
+      return internalLog(record, OWALRecordsFactory.INSTANCE.toStream(record));
     } finally {
       if (statistic != null)
         statistic.stopWALRecordTimer(false, false);
@@ -442,9 +432,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
    * @return
    * @throws IOException
    */
-  private InternalLogResult internalLog(OWALRecord record, byte[] recordContent) throws IOException {
-    OLogSegment segmentToStopFlush = null;
-
+  private OLogSequenceNumber internalLog(OWALRecord record, byte[] recordContent) throws IOException {
     final OLogSequenceNumber lsn;
 
     syncObject.lock();
@@ -492,7 +480,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
 
         if (record instanceof OAtomicUnitEndRecord && activeOperations.size() == 1 || (!(record instanceof OOperationUnitRecord)
             && activeOperations.isEmpty())) {
-          segmentToStopFlush = last;
+          last.stopFlush(true);
 
           last = new OLogSegment(this, new File(walLocation, getSegmentName(last.getOrder() + 1)), fileTTL, maxPagesCacheSize,
               performanceStatisticManager);
@@ -522,7 +510,7 @@ public class ODiskWriteAheadLog extends OAbstractWriteAheadLog {
       syncObject.unlock();
     }
 
-    return new InternalLogResult(lsn, segmentToStopFlush);
+    return lsn;
   }
 
   @Override
