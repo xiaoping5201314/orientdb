@@ -1730,10 +1730,11 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       assert chunk.isEmpty();
 
       try {
-        while (chunk.size() < CHUNK_SIZE) {
+        while (chunk.size() < CHUNK_SIZE && (endTs - startTs < backgroundFlushInterval)) {
           //if we reached first part of the ring, swap iterator to next part of the ring
           if (!pageIterator.hasNext()) {
             flushedPages += flushPagesChunk(chunk);
+            endTs = System.nanoTime();
 
             pageIterator = writeCachePages.entrySet().iterator();
           }
@@ -1777,6 +1778,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           } else {
             if (lastFileId != pointer.getFileId() || lastPageIndex != pointer.getPageIndex()) {
               flushedPages += flushPagesChunk(chunk);
+              endTs = System.nanoTime();
 
               chunk.add(new OTriple<Long, ByteBuffer, OCachePointer>(version, copy, pointer));
             } else {
