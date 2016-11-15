@@ -1670,7 +1670,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         assert ewcs >= 0;
         final double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
 
-        if (lastExclusivePagesPrint == -1 || lastExclusivePagesPrint - startTs > 10000000000L) {
+        if (lastExclusivePagesPrint == -1 || startTs - lastExclusivePagesPrint > 10000000000L) {
           OLogManager.instance().error(this, "Share of exclusive pages " + exclusiveWriteCacheThreshold);
           lastExclusivePagesPrint = startTs;
         }
