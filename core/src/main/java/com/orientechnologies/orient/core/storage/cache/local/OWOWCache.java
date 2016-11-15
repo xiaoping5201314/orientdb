@@ -98,6 +98,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final ConcurrentHashMap<PageKey, OLogSequenceNumber> dirtyPages = new ConcurrentHashMap<PageKey, OLogSequenceNumber>();
 
+  private volatile long lastExclusivePagesPrint = -1;
+
   /**
    * Amount of pages which were booked in file but were not flushed yet.
    * <p>
@@ -109,13 +111,13 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
    * to other files. So to calculate free space which is really consumed by system we calculate amount of pages which were booked
    * but not written yet on disk.
    */
-  private final AtomicLong          countOfNotFlushedPages = new AtomicLong();
+  private final AtomicLong countOfNotFlushedPages = new AtomicLong();
 
   /**
    * This counter is need for "free space" check implementation.
    * Once amount of added pages is reached some threshold, amount of free space available on disk will be checked.
    */
-  private final ODistributedCounter amountOfNewPagesAdded  = new ODistributedCounter();
+  private final ODistributedCounter amountOfNewPagesAdded = new ODistributedCounter();
 
   private final ODistributedCounter writeCacheSize          = new ODistributedCounter();
   private final ODistributedCounter exclusiveWriteCacheSize = new ODistributedCounter();
@@ -124,7 +126,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   /**
    * Serializer for file names are used inside of storage.
    */
-  private final OBinarySerializer<String>                    stringSerializer;
+  private final OBinarySerializer<String> stringSerializer;
 
   /**
    * Container for all files instances are used in storage.
@@ -1667,6 +1669,11 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
         assert ewcs >= 0;
         final double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+        if (lastExclusivePagesPrint == -1 || lastExclusivePagesPrint - startTs > 10000000000L) {
+          OLogManager.instance().error(this, "Share of exclusive pages " + exclusiveWriteCacheThreshold);
+          lastExclusivePagesPrint = startTs;
+        }
 
         if (exclusiveWriteCacheThreshold > 0.7) {
           flushedPages += flushExclusiveWriteCache(startTs);
