@@ -64,6 +64,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.zip.CRC32;
 
@@ -133,6 +134,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
    * Once amount of open files reaches limit rarely used files will be automatically closed.
    */
   private final OClosableLinkedContainer<Long, OFileClassic> files;
+
+  private final AtomicReference<CountDownLatch> exclusivePagesLatch = new AtomicReference<CountDownLatch>();
 
   private final boolean        syncOnPageFlush;
   private final int            pageSize;
@@ -656,11 +659,10 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
   }
 
-  public Future store(final long fileId, final long pageIndex, final OCachePointer dataPointer) {
-    Future future = null;
-
+  public CountDownLatch store(final long fileId, final long pageIndex, final OCachePointer dataPointer) {
     final int intId = extractFileId(fileId);
 
+    CountDownLatch latch;
     filesLock.acquireReadLock();
     try {
       final PageKey pageKey = new PageKey(intId, pageIndex);
@@ -678,15 +680,25 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         lockManager.releaseLock(groupLock);
       }
 
+      latch = exclusivePagesLatch.get();
+      if (latch != null)
+        return latch;
+
       if (exclusiveWriteCacheSize.get() > exclusiveWriteCacheMaxSize) {
         cacheOverflowCount.increment();
-        future = commitExecutor.submit(new PeriodicFlushTask());
+
+        latch = new CountDownLatch(1);
+        if (!exclusivePagesLatch.compareAndSet(null, latch))
+          latch = exclusivePagesLatch.get();
+
+        commitExecutor.submit(new PeriodicFlushTask());
       }
 
-      return future;
     } finally {
       filesLock.releaseReadLock();
     }
+
+    return latch;
   }
 
   private void doPutInCache(OCachePointer dataPointer, PageKey pageKey) {
@@ -1633,7 +1645,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
       OLogSequenceNumber minDirtyLSN = firstEntry.getValue();
       while (minDirtyLSN.getSegment() < segmentId) {
-        flushWriteCacheFromMinLSN(System.nanoTime());
+        flushExclusivePagesIfNeeded(0, System.nanoTime());
+
+        flushWriteCacheFromMinLSN();
 
         firstEntry = calculateMinDirtyLSNEntry();
         if (firstEntry == null)
@@ -1665,21 +1679,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         // 2) pages which are exclusively held by write cache
         //
         // last type of buffer usually small and if it is close to overflow we should flush it first
-        final long ewcs = exclusiveWriteCacheSize.get();
-
-        assert ewcs >= 0;
-        final double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
-
-        if (lastExclusivePagesPrint == -1 || startTs - lastExclusivePagesPrint > 10000000000L) {
-          OLogManager.instance().error(this, "Share of exclusive pages " + exclusiveWriteCacheThreshold);
-          lastExclusivePagesPrint = startTs;
-        }
-
-        if (exclusiveWriteCacheThreshold > 0.7) {
-          flushedPages += flushExclusiveWriteCache(startTs);
-        }
-
-        flushedPages += flushWriteCacheFromMinLSN(startTs);
+        flushedPages = flushExclusivePagesIfNeeded(flushedPages, startTs);
+        flushedPages += flushWriteCacheFromMinLSN();
       } catch (IOException e) {
         OLogManager.instance().error(this, "Exception during data flush", e);
         OWOWCache.this.fireBackgroundDataProcessingExceptionEvent(e);
@@ -1696,13 +1697,48 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
   }
 
-  private int flushWriteCacheFromMinLSN(final long startTs) throws IOException {
+  private int flushExclusivePagesIfNeeded(int flushedPages, long startTs) throws IOException {
+    long ewcs = exclusiveWriteCacheSize.get();
+
+    assert ewcs >= 0;
+    double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+    if (lastExclusivePagesPrint == -1 || startTs - lastExclusivePagesPrint > 10000000000L) {
+      OLogManager.instance().error(this, "Share of exclusive pages " + exclusiveWriteCacheThreshold);
+      lastExclusivePagesPrint = startTs;
+    }
+
+    if (exclusiveWriteCacheThreshold > 0.7) {
+      flushedPages += flushExclusiveWriteCache();
+    } else {
+      final CountDownLatch latch = exclusivePagesLatch.get();
+      if (latch != null)
+        latch.countDown();
+
+      exclusivePagesLatch.set(null);
+    }
+
+    ewcs = exclusiveWriteCacheSize.get();
+    exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+    if (exclusiveWriteCacheThreshold <= 0.7) {
+      final CountDownLatch latch = exclusivePagesLatch.get();
+      if (latch != null)
+        latch.countDown();
+
+      exclusivePagesLatch.set(null);
+    }
+    return flushedPages;
+  }
+
+  private int flushWriteCacheFromMinLSN() throws IOException {
     //iterator which will be used to iterate over ring buffer
     Iterator<Map.Entry<PageKey, OCachePointer>> pageIterator;
 
     //first we try to find page which contains the oldest not flushed changes
     //that is needed to allow to compact WAL as earlier as possible
     final Map.Entry<PageKey, OLogSequenceNumber> firstMinLSNEntry = calculateMinDirtyLSNEntry();
+    final long startTs = System.nanoTime();
 
     if (firstMinLSNEntry != null) {
       final PageKey minPageKey = firstMinLSNEntry.getKey();
@@ -1720,7 +1756,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     final ArrayList<OTriple<Long, ByteBuffer, OCachePointer>> chunk = new ArrayList<OTriple<Long, ByteBuffer, OCachePointer>>(
         CHUNK_SIZE);
 
-    long endTs = System.nanoTime();
+    long endTs = startTs;
 
     flushCycle:
     while ((endTs - startTs < backgroundFlushInterval)) {
@@ -1882,85 +1918,85 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     return flushedPages;
   }
 
-  private int flushExclusiveWriteCache(final long startTs) throws IOException {
+  private int flushExclusiveWriteCache() throws IOException {
     final Iterator<PageKey> iterator = exclusiveWritePages.iterator();
-    long endTs = System.nanoTime();
 
     int flushedPages = 0;
+    final long ewcs = exclusiveWriteCacheSize.get();
+    final double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
 
-    while (iterator.hasNext() && endTs - startTs < backgroundFlushInterval) {
-      try {
-        final PageKey pageKey = iterator.next();
+    double flushThreshold = exclusiveWriteCacheThreshold - 0.7;
+    final long pagesToFlush = Math.max((long) Math.ceil(flushThreshold * exclusiveWriteCacheMaxSize), 1);
 
-        final OCachePointer pointer = writeCachePages.get(pageKey);
-        final long version;
+    while (iterator.hasNext() && flushedPages < pagesToFlush) {
+      final PageKey pageKey = iterator.next();
 
-        if (pointer == null) {
-          iterator.remove();
-        } else {
-          pointer.acquireSharedLock();
+      final OCachePointer pointer = writeCachePages.get(pageKey);
+      final long version;
 
-          final ByteBuffer copy = bufferPool.acquireDirect(false);
+      if (pointer == null) {
+        iterator.remove();
+      } else {
+        pointer.acquireSharedLock();
+
+        final ByteBuffer copy = bufferPool.acquireDirect(false);
+        try {
           try {
-            try {
-              version = pointer.getVersion();
-              final ByteBuffer buffer = pointer.getSharedBuffer();
-              preparePageToFlush(buffer);
+            version = pointer.getVersion();
+            final ByteBuffer buffer = pointer.getSharedBuffer();
+            preparePageToFlush(buffer);
 
-              buffer.position(0);
-              copy.position(0);
-
-              copy.put(buffer);
-
-              dirtyPages.remove(pageKey);
-              pointer.setInWriteCache(false);
-            } finally {
-              pointer.releaseSharedLock();
-            }
-
-            flushWriteCacheTillLSN(copy);
+            buffer.position(0);
             copy.position(0);
 
-            if (pointer.isNotFlushed()) {
-              pointer.setNotFlushed(false);
+            copy.put(buffer);
 
-              countOfNotFlushedPages.decrementAndGet();
-            }
-
-            final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
-            try {
-              final OFileClassic fileClassic = entry.get();
-              fileClassic.write(pageKey.pageIndex * pageSize, copy);
-            } finally {
-              files.release(entry);
-            }
+            dirtyPages.remove(pageKey);
+            pointer.setInWriteCache(false);
           } finally {
-            bufferPool.release(copy);
+            pointer.releaseSharedLock();
           }
 
-          flushedPages++;
+          flushWriteCacheTillLSN(copy);
+          copy.position(0);
 
-          final Lock lock = lockManager.acquireExclusiveLock(pageKey);
+          if (pointer.isNotFlushed()) {
+            pointer.setNotFlushed(false);
+
+            countOfNotFlushedPages.decrementAndGet();
+          }
+
+          final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
           try {
-            if (!pointer.tryAcquireSharedLock())
-              continue;
-            try {
-              if (pointer.getVersion() == version) {
-                writeCachePages.remove(pageKey);
-                writeCacheSize.decrement();
+            final OFileClassic fileClassic = entry.get();
+            fileClassic.write(pageKey.pageIndex * pageSize, copy);
+          } finally {
+            files.release(entry);
+          }
+        } finally {
+          bufferPool.release(copy);
+        }
 
-                pointer.decrementWritersReferrer();
-                pointer.setWritersListener(null);
-              }
-            } finally {
-              pointer.releaseSharedLock();
+        flushedPages++;
+
+        final Lock lock = lockManager.acquireExclusiveLock(pageKey);
+        try {
+          if (!pointer.tryAcquireSharedLock())
+            continue;
+          try {
+            if (pointer.getVersion() == version) {
+              writeCachePages.remove(pageKey);
+              writeCacheSize.decrement();
+
+              pointer.decrementWritersReferrer();
+              pointer.setWritersListener(null);
             }
           } finally {
-            lock.unlock();
+            pointer.releaseSharedLock();
           }
+        } finally {
+          lock.unlock();
         }
-      } finally {
-        endTs = System.nanoTime();
       }
     }
 

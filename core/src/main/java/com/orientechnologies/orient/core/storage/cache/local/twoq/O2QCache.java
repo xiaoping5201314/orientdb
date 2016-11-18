@@ -41,6 +41,7 @@ import java.nio.channels.FileChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -298,7 +299,7 @@ public class O2QCache implements OReadCache {
   public void releaseFromWrite(OCacheEntry cacheEntry, OWriteCache writeCache) {
     cacheEntry.releaseExclusiveLock();
 
-    Future<?> flushFuture = null;
+    CountDownLatch latch = null;
 
     Lock fileLock;
     Lock pageLock;
@@ -322,7 +323,7 @@ public class O2QCache implements OReadCache {
             }
 
             try {
-              flushFuture = writeCache.store(cacheEntry.getFileId(), cacheEntry.getPageIndex(), cacheEntry.getCachePointer());
+              latch = writeCache.store(cacheEntry.getFileId(), cacheEntry.getPageIndex(), cacheEntry.getCachePointer());
             } finally {
               if (sessionStoragePerformanceStatistic != null) {
                 sessionStoragePerformanceStatistic.stopPageWriteInCacheTimer();
@@ -341,9 +342,9 @@ public class O2QCache implements OReadCache {
       cacheLock.releaseReadLock();
     }
 
-    if (flushFuture != null) {
+    if (latch != null) {
       try {
-        flushFuture.get();
+        latch.await();
       } catch (InterruptedException e) {
         Thread.interrupted();
         throw new OInterruptedException("File flush was interrupted");
