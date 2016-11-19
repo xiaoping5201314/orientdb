@@ -99,8 +99,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private final ConcurrentHashMap<PageKey, OLogSequenceNumber> dirtyPages = new ConcurrentHashMap<PageKey, OLogSequenceNumber>();
 
-  private volatile long lastExclusivePagesPrint = -1;
-
   /**
    * Amount of pages which were booked in file but were not flushed yet.
    * <p>
@@ -1645,7 +1643,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
       OLogSequenceNumber minDirtyLSN = firstEntry.getValue();
       while (minDirtyLSN.getSegment() < segmentId) {
-        flushExclusivePagesIfNeeded(0, System.nanoTime());
+        flushExclusivePagesIfNeeded(0);
 
         flushWriteCacheFromMinLSN();
 
@@ -1679,7 +1677,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         // 2) pages which are exclusively held by write cache
         //
         // last type of buffer usually small and if it is close to overflow we should flush it first
-        flushedPages = flushExclusivePagesIfNeeded(flushedPages, startTs);
+        flushedPages = flushExclusivePagesIfNeeded(flushedPages);
         flushedPages += flushWriteCacheFromMinLSN();
       } catch (IOException e) {
         OLogManager.instance().error(this, "Exception during data flush", e);
@@ -1697,16 +1695,11 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     }
   }
 
-  private int flushExclusivePagesIfNeeded(int flushedPages, long startTs) throws IOException {
+  private int flushExclusivePagesIfNeeded(int flushedPages) throws IOException {
     long ewcs = exclusiveWriteCacheSize.get();
 
     assert ewcs >= 0;
     double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
-
-    if (lastExclusivePagesPrint == -1 || startTs - lastExclusivePagesPrint > 10000000000L) {
-      OLogManager.instance().error(this, "Share of exclusive pages " + exclusiveWriteCacheThreshold);
-      lastExclusivePagesPrint = startTs;
-    }
 
     if (exclusiveWriteCacheThreshold > 0.7) {
       flushedPages += flushExclusiveWriteCache();
