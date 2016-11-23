@@ -1746,9 +1746,9 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     assert ewcs >= 0;
     double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
 
-    if (exclusiveWriteCacheThreshold > 0.7) {
+    if (exclusiveWriteCacheThreshold > 0.5) {
       flushedPages += flushExclusiveWriteCache();
-    } else {
+    } else if (exclusiveWriteCacheThreshold <= 0.9){
       final CountDownLatch latch = exclusivePagesLatch.get();
       if (latch != null)
         latch.countDown();
@@ -1759,7 +1759,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     ewcs = exclusiveWriteCacheSize.get();
     exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
 
-    if (exclusiveWriteCacheThreshold <= 0.7) {
+    if (exclusiveWriteCacheThreshold <= 0.9) {
       final CountDownLatch latch = exclusivePagesLatch.get();
       if (latch != null)
         latch.countDown();
