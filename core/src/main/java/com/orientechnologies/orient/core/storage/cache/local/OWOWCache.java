@@ -1962,11 +1962,21 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     final Iterator<PageKey> iterator = exclusiveWritePages.iterator();
 
     int flushedPages = 0;
-    final long ewcs = exclusiveWriteCacheSize.get();
-    final double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+    int removedPages = 0;
 
-    double flushThreshold = exclusiveWriteCacheThreshold - 0.7;
+    long ewcs = exclusiveWriteCacheSize.get();
+    double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+    double flushThreshold = exclusiveWriteCacheThreshold - 0.5;
     final long pagesToFlush = Math.max((long) Math.ceil(flushThreshold * exclusiveWriteCacheMaxSize), 1);
+
+    final double releaseLatchThreshold = exclusiveWriteCacheThreshold - 0.85;
+    final double releaseLatchPages;
+    if (releaseLatchThreshold > 0) {
+      releaseLatchPages = releaseLatchThreshold * exclusiveWriteCacheMaxSize;
+    } else {
+      releaseLatchPages = -1;
+    }
 
     while (iterator.hasNext() && flushedPages < pagesToFlush) {
       final PageKey pageKey = iterator.next();
@@ -2030,12 +2040,27 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
               pointer.decrementWritersReferrer();
               pointer.setWritersListener(null);
+
+              removedPages++;
             }
           } finally {
             pointer.releaseSharedLock();
           }
         } finally {
           lock.unlock();
+        }
+
+        if (removedPages > 0 && releaseLatchPages > 0 && removedPages % releaseLatchPages == 0) {
+          ewcs = exclusiveWriteCacheSize.get();
+          exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+          if (exclusiveWriteCacheThreshold <= 0.85) {
+            final CountDownLatch latch = exclusivePagesLatch.get();
+            if (latch != null)
+              latch.countDown();
+
+            exclusivePagesLatch.set(null);
+          }
         }
       }
     }
