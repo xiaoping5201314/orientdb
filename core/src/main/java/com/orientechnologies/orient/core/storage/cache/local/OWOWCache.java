@@ -1748,7 +1748,18 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     if (exclusiveWriteCacheThreshold > 0.5) {
       flushedPages += flushExclusiveWriteCache();
-    } else if (exclusiveWriteCacheThreshold <= 0.9){
+
+      ewcs = exclusiveWriteCacheSize.get();
+      exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+      if (exclusiveWriteCacheThreshold <= 0.85) {
+        final CountDownLatch latch = exclusivePagesLatch.get();
+        if (latch != null)
+          latch.countDown();
+
+        exclusivePagesLatch.set(null);
+      }
+    } else {
       final CountDownLatch latch = exclusivePagesLatch.get();
       if (latch != null)
         latch.countDown();
@@ -1756,16 +1767,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       exclusivePagesLatch.set(null);
     }
 
-    ewcs = exclusiveWriteCacheSize.get();
-    exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
-
-    if (exclusiveWriteCacheThreshold <= 0.9) {
-      final CountDownLatch latch = exclusivePagesLatch.get();
-      if (latch != null)
-        latch.countDown();
-
-      exclusivePagesLatch.set(null);
-    }
     return flushedPages;
   }
 
