@@ -1795,6 +1795,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           //if we reached first part of the ring, swap iterator to next part of the ring
           if (!pageIterator.hasNext()) {
             flushedPages += flushPagesChunk(chunk);
+            releaseExclusiveLatch();
+
             endTs = System.nanoTime();
 
             pageIterator = writeCachePages.entrySet().iterator();
@@ -1839,6 +1841,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           } else {
             if (lastFileId != pointer.getFileId() || lastPageIndex != pointer.getPageIndex()) {
               flushedPages += flushPagesChunk(chunk);
+              releaseExclusiveLatch();
+
               endTs = System.nanoTime();
 
               chunk.add(new OTriple<Long, ByteBuffer, OCachePointer>(version, copy, pointer));
@@ -1852,15 +1856,15 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
         }
 
         flushedPages += flushPagesChunk(chunk);
+        releaseExclusiveLatch();
       } finally {
         endTs = System.nanoTime();
       }
-
-      releaseExclusiveLatch();
     }
 
     assert chunk.isEmpty();
 
+    releaseExclusiveLatch();
     return flushedPages;
   }
 
@@ -1959,7 +1963,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   }
 
   private int flushExclusiveWriteCache() throws IOException {
-    final Iterator<PageKey> iterator = exclusiveWritePages.iterator();
+    Iterator<PageKey> iterator = exclusiveWritePages.iterator();
 
     int flushedPages = 0;
 
@@ -1969,19 +1973,37 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     double flushThreshold = exclusiveWriteCacheThreshold - 0.5;
     final long pagesToFlush = Math.max((long) Math.ceil(flushThreshold * exclusiveWriteCacheMaxSize), 1);
 
-    while (iterator.hasNext() && flushedPages < pagesToFlush) {
-      final PageKey pageKey = iterator.next();
+    final ArrayList<OTriple<Long, ByteBuffer, OCachePointer>> chunk = new ArrayList<OTriple<Long, ByteBuffer, OCachePointer>>(
+        CHUNK_SIZE);
 
-      final OCachePointer pointer = writeCachePages.get(pageKey);
-      final long version;
+    flushCycle:
+    while (flushedPages < pagesToFlush) {
+      long lastFileId = -1;
+      long lastPageIndex = -1;
 
-      if (pointer == null) {
-        iterator.remove();
-      } else {
-        pointer.acquireSharedLock();
+      while (chunk.size() < CHUNK_SIZE && flushedPages < pagesToFlush) {
+        if (!iterator.hasNext()) {
+          flushedPages += flushPagesChunk(chunk);
+          releaseExclusiveLatch();
 
-        final ByteBuffer copy = bufferPool.acquireDirect(false);
-        try {
+          iterator = exclusiveWritePages.iterator();
+        }
+
+        if (!iterator.hasNext()) {
+          break flushCycle;
+        }
+
+        final PageKey pageKey = iterator.next();
+
+        final OCachePointer pointer = writeCachePages.get(pageKey);
+        final long version;
+
+        if (pointer == null) {
+          iterator.remove();
+        } else {
+          pointer.acquireSharedLock();
+
+          final ByteBuffer copy = bufferPool.acquireDirect(false);
           try {
             version = pointer.getVersion();
             final ByteBuffer buffer = pointer.getSharedBuffer();
@@ -2001,48 +2023,29 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           flushWriteCacheTillLSN(copy);
           copy.position(0);
 
-          if (pointer.isNotFlushed()) {
-            pointer.setNotFlushed(false);
+          if (chunk.isEmpty()) {
+            chunk.add(new OTriple<Long, ByteBuffer, OCachePointer>(version, copy, pointer));
+          } else {
+            if (lastFileId != pointer.getFileId() || lastPageIndex != pointer.getPageIndex()) {
+              flushedPages += flushPagesChunk(chunk);
+              releaseExclusiveLatch();
 
-            countOfNotFlushedPages.decrementAndGet();
-          }
-
-          final OClosableEntry<Long, OFileClassic> entry = files.acquire(composeFileId(id, pageKey.fileId));
-          try {
-            final OFileClassic fileClassic = entry.get();
-            fileClassic.write(pageKey.pageIndex * pageSize, copy);
-          } finally {
-            files.release(entry);
-          }
-        } finally {
-          bufferPool.release(copy);
-        }
-
-        flushedPages++;
-
-        final Lock lock = lockManager.acquireExclusiveLock(pageKey);
-        try {
-          if (!pointer.tryAcquireSharedLock())
-            continue;
-          try {
-            if (pointer.getVersion() == version) {
-              writeCachePages.remove(pageKey);
-              writeCacheSize.decrement();
-
-              pointer.decrementWritersReferrer();
-              pointer.setWritersListener(null);
+              chunk.add(new OTriple<Long, ByteBuffer, OCachePointer>(version, copy, pointer));
+            } else {
+              chunk.add(new OTriple<Long, ByteBuffer, OCachePointer>(version, copy, pointer));
             }
-          } finally {
-            pointer.releaseSharedLock();
           }
-        } finally {
-          lock.unlock();
-        }
 
-        releaseExclusiveLatch();
+          lastFileId = pointer.getFileId();
+          lastPageIndex = pointer.getPageIndex();
+        }
       }
+
+      flushedPages += flushPagesChunk(chunk);
+      releaseExclusiveLatch();
     }
 
+    releaseExclusiveLatch();
     return flushedPages;
   }
 
