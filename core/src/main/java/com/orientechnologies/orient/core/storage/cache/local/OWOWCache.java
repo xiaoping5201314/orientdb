@@ -123,7 +123,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
   private final ODistributedCounter amountOfNewPagesAdded = new ODistributedCounter();
 
   private final ODistributedCounter writeCacheSize          = new ODistributedCounter();
-  private final ODistributedCounter exclusiveWriteCacheSize = new ODistributedCounter();
+  private final AtomicLong          exclusiveWriteCacheSize = new AtomicLong();
   private final ODistributedCounter cacheOverflowCount      = new ODistributedCounter();
 
   /**
@@ -833,7 +833,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
                 //item only in write cache till we will not return
                 //it to read cache so we increment exclusive size by one
                 //otherwise call of write listener inside pointer may set exclusive size to negative value
-                exclusiveWriteCacheSize.increment();
+                exclusiveWriteCacheSize.getAndIncrement();
 
                 doPutInCache(cachePointer, new PageKey(intId, index));
 
@@ -882,13 +882,13 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   @Override
   public void addOnlyWriters(final long fileId, final long pageIndex) {
-    exclusiveWriteCacheSize.increment();
+    exclusiveWriteCacheSize.getAndIncrement();
     exclusiveWritePages.add(new PageKey(extractFileId(fileId), pageIndex));
   }
 
   @Override
   public void removeOnlyWriters(final long fileId, final long pageIndex) {
-    exclusiveWriteCacheSize.decrement();
+    exclusiveWriteCacheSize.getAndDecrement();
     exclusiveWritePages.remove(new PageKey(extractFileId(fileId), pageIndex));
   }
 
@@ -1748,23 +1748,8 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
     if (exclusiveWriteCacheThreshold > 0.5) {
       flushedPages += flushExclusiveWriteCache();
-
-      ewcs = exclusiveWriteCacheSize.get();
-      exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
-
-      if (exclusiveWriteCacheThreshold <= 0.85) {
-        final CountDownLatch latch = exclusivePagesLatch.get();
-        if (latch != null)
-          latch.countDown();
-
-        exclusivePagesLatch.set(null);
-      }
     } else {
-      final CountDownLatch latch = exclusivePagesLatch.get();
-      if (latch != null)
-        latch.countDown();
-
-      exclusivePagesLatch.set(null);
+      releaseExclusiveLatch();
     }
 
     return flushedPages;
@@ -1870,11 +1855,26 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
       } finally {
         endTs = System.nanoTime();
       }
+
+      releaseExclusiveLatch();
     }
 
     assert chunk.isEmpty();
 
     return flushedPages;
+  }
+
+  private void releaseExclusiveLatch() {
+    final long ewcs = exclusiveWriteCacheSize.get();
+    double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
+
+    if (exclusiveWriteCacheThreshold <= 0.85) {
+      final CountDownLatch latch = exclusivePagesLatch.get();
+      if (latch != null)
+        latch.countDown();
+
+      exclusivePagesLatch.set(null);
+    }
   }
 
   private int flushPagesChunk(ArrayList<OTriple<Long, ByteBuffer, OCachePointer>> chunk) throws IOException {
@@ -1962,21 +1962,12 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
     final Iterator<PageKey> iterator = exclusiveWritePages.iterator();
 
     int flushedPages = 0;
-    int removedPages = 0;
 
     long ewcs = exclusiveWriteCacheSize.get();
     double exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
 
     double flushThreshold = exclusiveWriteCacheThreshold - 0.5;
     final long pagesToFlush = Math.max((long) Math.ceil(flushThreshold * exclusiveWriteCacheMaxSize), 1);
-
-    final double releaseLatchThreshold = exclusiveWriteCacheThreshold - 0.85;
-    final double releaseLatchPages;
-    if (releaseLatchThreshold > 0) {
-      releaseLatchPages = releaseLatchThreshold * exclusiveWriteCacheMaxSize;
-    } else {
-      releaseLatchPages = -1;
-    }
 
     while (iterator.hasNext() && flushedPages < pagesToFlush) {
       final PageKey pageKey = iterator.next();
@@ -2040,8 +2031,6 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
               pointer.decrementWritersReferrer();
               pointer.setWritersListener(null);
-
-              removedPages++;
             }
           } finally {
             pointer.releaseSharedLock();
@@ -2050,18 +2039,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
           lock.unlock();
         }
 
-        if (removedPages > 0 && releaseLatchPages > 0 && removedPages % releaseLatchPages == 0) {
-          ewcs = exclusiveWriteCacheSize.get();
-          exclusiveWriteCacheThreshold = ((double) ewcs) / exclusiveWriteCacheMaxSize;
-
-          if (exclusiveWriteCacheThreshold <= 0.85) {
-            final CountDownLatch latch = exclusivePagesLatch.get();
-            if (latch != null)
-              latch.countDown();
-
-            exclusivePagesLatch.set(null);
-          }
-        }
+        releaseExclusiveLatch();
       }
     }
 
