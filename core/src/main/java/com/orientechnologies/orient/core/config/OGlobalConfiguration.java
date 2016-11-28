@@ -227,7 +227,7 @@ public enum OGlobalConfiguration {
       + " it is highly recommended to use a separate disk to store log operations", String.class, null),
 
   DISK_CACHE_PAGE_SIZE("storage.diskCache.pageSize", "Size of page of disk buffer (in kilobytes). !!! NEVER CHANGE THIS VALUE !!!",
-      Integer.class, 4),
+      Integer.class, 16),
 
   DISK_CACHE_FREE_SPACE_LIMIT("storage.diskCache.diskFreeSpaceLimit", "Minimum amount of space on disk, which, when exceeded, "
       + "will cause the database to switch to read-only mode (in megabytes)", Long.class,
