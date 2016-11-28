@@ -77,7 +77,7 @@ public class OWOWCache extends OAbstractWriteCache implements OWriteCache, OCach
 
   private static final String NAME_ID_MAP = "name_id_map" + NAME_ID_MAP_EXTENSION;
 
-  private static final int CHUNK_SIZE     = 8;
+  private static final int CHUNK_SIZE     = 128;
   private static final int MIN_CACHE_SIZE = 16;
 
   public static final long MAGIC_NUMBER = 0xFACB03FEL;
